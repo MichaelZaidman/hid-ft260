@@ -35,3 +35,4 @@ Links to the specs:
 1. [DS_FT260.pdf](https://ftdichip.com/wp-content/uploads/2020/07/DS_FT260.pdf)
 2. [AN_394_User_Guide_for_FT260.pdf](https://www.ftdichip.com/Support/Documents/AppNotes/AN_394_User_Guide_for_FT260.pdf)
 
+Link to the driver code - [https://lkml.org/lkml/2021/2/19/484](https://lkml.org/lkml/2021/2/19/484) 
