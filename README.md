@@ -31,11 +31,11 @@ when the I2C controller is a part of the MCU or CPU vendor chipset.
     is managed via hidraw and libusb user-space libraries, it requires
     an explicit synchronization between the processes.
 
-Links to the specs:
+Specs:
 1. [DS_FT260.pdf](https://ftdichip.com/wp-content/uploads/2020/07/DS_FT260.pdf)
 2. [AN_394_User_Guide_for_FT260.pdf](https://www.ftdichip.com/Support/Documents/AppNotes/AN_394_User_Guide_for_FT260.pdf)
 
-The driver merged into the kernel 5.13.
-Links:
+The driver is merged into the Linux kernel 5.13 mainline.
+
 1. Kernel - [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/hid/hid-ft260.c?h=v5.13](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/hid/hid-ft260.c?h=v5.13)
 2. Commit - [https://lkml.org/lkml/2021/2/19/484](https://lkml.org/lkml/2021/2/19/484)
