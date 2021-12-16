@@ -28,9 +28,9 @@ following benefits:
     multiplexers and/or I2C switches.
 3.	It guarantees atomic access at the kernel level to the I2C devices,
     resided on the I2C controller's bus, implicitly enabling concurrent
-    access to the I2C bus from multiple userspace processes, in contrast
-    to when such access performs via hidraw and libusb userspace libraries
-    requiring explicit processes synchronization.
+    access to the I2C bus from multiple userspace processes instead of
+    explicit contexts synchronization when such access is done via hidraw
+    and libusb userspace libraries.
 
 Specs:
 1. [DS_FT260.pdf](https://ftdichip.com/wp-content/uploads/2020/07/DS_FT260.pdf)
