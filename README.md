@@ -1,5 +1,7 @@
 # hid-ft260
 
+## Overview
+
 ### FTDI FT260 USB HID to I2C host bridge Linux kernel driver
 
 The FTDI FT260 chip implements USB to I2C/UART bridges through two
@@ -40,3 +42,26 @@ The driver is merged into the Linux kernel 5.13 mainline.
 
 1. Kernel - [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/hid/hid-ft260.c?h=v5.13](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/hid/hid-ft260.c?h=v5.13)
 2. Commit - [https://lkml.org/lkml/2021/2/19/484](https://lkml.org/lkml/2021/2/19/484)
+3. The latest and greatest version of the driver is hosted in this repo.
+
+
+## HOWTO
+```
+git clone https://github.com/MichaelZaidman/hid-ft260.git
+cd hid-ft260
+make
+sudo insmod hid-ft260.ko
+```
+
+If you got the below failure, your kernel does not support the hid_is_usb which was added by [https://lkml.org/lkml/2021/12/13/526](https://lkml.org/lkml/2021/12/13/526) commit.
+```
+/home/swuser/sw/hid-ft260/hid-ft260.c: In function ‘ft260_probe’:
+/home/swuser/sw/hid-ft260/hid-ft260.c:928:7: error: implicit declaration of function ‘hid_is_usb’ [-Werror=implicit-function-declaration]
+  if (!hid_is_usb(hdev))
+```
+
+As workaround you can comment two lines in the ft260_probe routine:
+```
+        if (!hid_is_usb(hdev))
+                return -EINVAL;
+```
