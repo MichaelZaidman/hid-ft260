@@ -464,7 +464,8 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 
 	do {
 		if (first) {
-			if (flag & FT260_FLAG_START_REPEATED)
+			if (FT260_FLAG_START_REPEATED ==
+			    (FT260_FLAG_START_REPEATED & flag))
 				flag = FT260_FLAG_START_REPEATED;
 			else
 				flag = FT260_FLAG_START;
