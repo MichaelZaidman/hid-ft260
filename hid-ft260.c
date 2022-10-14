@@ -495,7 +495,6 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 {
 	u16 rd_len;
 	struct ft260_i2c_read_request_report rep;
-	bool first = true;
 	int ret = 0;
 
 	/*
@@ -515,7 +514,7 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 		rep.flag = FT260_FLAG_START_STOP;
 
 		ft260_dbg("1 rep %#02x addr %#02x len %d rlen %d flag %#x\n",
-			  rep.report, rep.address, len, rd_len, flag);
+			  rep.report, rep.address, len, rd_len, rep.flag);
 
 		dev->read_buf = data;
 		dev->read_len = rd_len;
@@ -531,16 +530,11 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 	}
 
 	do {
-		if (first) {
-			if (FT260_FLAG_START_REPEATED ==
-			    (FT260_FLAG_START_REPEATED & flag))
-				flag = FT260_FLAG_START_REPEATED;
-			else
-				flag = FT260_FLAG_START;
-			first = false;
-		} else {
-			flag = 0;
-		}
+		if (FT260_FLAG_START_REPEATED ==
+			(FT260_FLAG_START_REPEATED & flag))
+			flag = FT260_FLAG_START_REPEATED;
+		else
+			flag = FT260_FLAG_START;
 
 		if (len <= FT260_RD_DATA_MAX) {
 			rd_len = len;
@@ -569,6 +563,7 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 
 		len -= rd_len;
 		data += rd_len;
+		flag = 0;
 
 	} while (len > 0);
 
