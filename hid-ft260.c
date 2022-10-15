@@ -378,18 +378,13 @@ static int ft260_i2c_write(struct ft260_device *dev, u8 addr, u8 *data,
 			   int len, u8 flag)
 {
 	int ret, wr_len, idx = 0;
-	bool first = true;
 	struct hid_device *hdev = dev->hdev;
 	struct ft260_i2c_write_request_report *rep =
 		(struct ft260_i2c_write_request_report *)dev->write_buf;
 
-	do {
-		rep->flag = 0;
-		if (first) {
-			rep->flag = FT260_FLAG_START;
-			first = false;
-		}
+	rep->flag = FT260_FLAG_START;
 
+	do {
 		if (len <= FT260_WR_DATA_MAX) {
 			wr_len = len;
 			if (flag == FT260_FLAG_START_STOP)
@@ -417,6 +412,7 @@ static int ft260_i2c_write(struct ft260_device *dev, u8 addr, u8 *data,
 
 		len -= wr_len;
 		idx += wr_len;
+		rep->flag = 0;
 
 	} while (len > 0);
 
