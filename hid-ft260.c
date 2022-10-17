@@ -529,25 +529,20 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 	}
 
 	do {
-		if (FT260_FLAG_START_REPEATED ==
-			(FT260_FLAG_START_REPEATED & flag))
-			flag = FT260_FLAG_START_REPEATED;
-		else
-			flag = FT260_FLAG_START;
+		rep.flag = flag & FT260_FLAG_START_REPEATED;
 
 		if (len <= FT260_RD_DATA_MAX) {
 			rd_len = len;
-			flag |= FT260_FLAG_STOP;
+			rep.flag |= FT260_FLAG_STOP;
 		} else {
 			rd_len = FT260_RD_DATA_MAX;
 		}
 
 		rep.length = cpu_to_le16(rd_len);
 		rep.address = addr;
-		rep.flag = flag;
 
 		ft260_dbg("2 rep %#02x addr %#02x len %d rlen %d flag %#x\n",
-			  rep.report, rep.address, len, rd_len, flag);
+			  rep.report, rep.address, len, rd_len, rep.flag);
 
 		reinit_completion(&dev->wait);
 
