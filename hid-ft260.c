@@ -29,7 +29,6 @@ MODULE_PARM_DESC(debug, "Toggle FT260 debugging messages");
 	} while (0)
 
 #define FT260_REPORT_MAX_LENGTH (64)
-#define FT260_REPORT_DATA_MAX (60)
 #define FT260_I2C_DATA_REPORT_ID(len) (FT260_I2C_REPORT_MIN + (len - 1) / 4)
 
 #define FT260_RD_DATA_MAX (256)
@@ -378,16 +377,18 @@ static int ft260_i2c_write(struct ft260_device *dev, u8 addr, u8 *data,
 			   int len, u8 flag)
 {
 	int ret, wr_len, idx = 0;
+	bool first = true;
 	struct hid_device *hdev = dev->hdev;
 	struct ft260_i2c_write_request_report *rep =
 		(struct ft260_i2c_write_request_report *)dev->write_buf;
 
-	if (len < 1)
-		return -EINVAL;
-
-	rep->flag = FT260_FLAG_START;
-
 	do {
+		rep->flag = 0;
+		if (first) {
+			rep->flag = FT260_FLAG_START;
+			first = false;
+		}
+
 		if (len <= FT260_WR_DATA_MAX) {
 			wr_len = len;
 			if (flag == FT260_FLAG_START_STOP)
@@ -415,7 +416,6 @@ static int ft260_i2c_write(struct ft260_device *dev, u8 addr, u8 *data,
 
 		len -= wr_len;
 		idx += wr_len;
-		rep->flag = 0;
 
 	} while (len > 0);
 
@@ -453,120 +453,80 @@ static int ft260_smbus_write(struct ft260_device *dev, u8 addr, u8 cmd,
 	return ret;
 }
 
-static int ft260_i2c_read_data(struct ft260_device *dev,
-			       struct ft260_i2c_read_request_report *rep)
-{
-	int timeout, ret = 0;
-	struct hid_device *hdev = dev->hdev;
-
-	rep->report = FT260_I2C_READ_REQ;
-
-	reinit_completion(&dev->wait);
-
-	dev->read_idx = 0;
-
-	ret = ft260_hid_output_report(hdev, (u8 *)rep,
-				sizeof(struct ft260_i2c_read_request_report));
-	if (ret < 0) {
-		hid_err(hdev, "%s: failed with %d\n", __func__, ret);
-		return ret;
-	}
-
-	timeout = msecs_to_jiffies(5000);
-	if (!wait_for_completion_timeout(&dev->wait, timeout)) {
-		ft260_i2c_reset(hdev);
-		return -ETIMEDOUT;
-	}
-
-	dev->read_buf = NULL;
-
-	ret = ft260_xfer_status(dev);
-	if (ret < 0) {
-		ft260_i2c_reset(hdev);
-		return -EIO;
-	}
-
-	return 0;
-}
-
 static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 			  u16 len, u8 flag)
 {
 	u16 rd_len;
+	u16 rd_data_max = 60;
+	int timeout, ret = 0;
 	struct ft260_i2c_read_request_report rep;
-	int ret = 0;
-
-	/*
-	 * The FT260 controller does not return NACK when performing a read
-	 * of multi-hid report size from a non-existing device or from the
-	 * device responding with NACK when it is not ready to serve the
-	 * request. However, it responds correctly with NACK to a read of
-	 * up to a single hid report size. To overcome this issue, we split
-	 * the muli-report read request into a read of a single HID report
-	 * size and a multi-report read.
-	 */
-	if (len > FT260_REPORT_DATA_MAX) {
-
-		rd_len = FT260_REPORT_DATA_MAX;
-		rep.length = cpu_to_le16(rd_len);
-		rep.address = addr;
-		rep.flag = FT260_FLAG_START_STOP;
-
-		ft260_dbg("1 rep %#02x addr %#02x len %d rlen %d flag %#x\n",
-			  rep.report, rep.address, len, rd_len, rep.flag);
-
-		dev->read_buf = data;
-		dev->read_len = rd_len;
-
-		ret = ft260_i2c_read_data(dev, &rep);
-		if (ret < 0) {
-			dev->read_buf = NULL;
-			return ret;
-		}
-
-		len -= rd_len;
-		data += rd_len;
-	}
+	struct hid_device *hdev = dev->hdev;
+	bool first = true;
 
 	do {
-		if (FT260_FLAG_START_REPEATED ==
-			(FT260_FLAG_START_REPEATED & flag))
-			flag = FT260_FLAG_START_REPEATED;
-		else
-			flag = FT260_FLAG_START;
+		if (first) {
+			if (FT260_FLAG_START_REPEATED ==
+			    (FT260_FLAG_START_REPEATED & flag))
+				flag = FT260_FLAG_START_REPEATED;
+			else
+				flag = FT260_FLAG_START;
+			first = false;
+		} else {
+			flag = 0;
+		}
 
-		if (len <= FT260_RD_DATA_MAX) {
+		if (len <= rd_data_max) {
 			rd_len = len;
 			flag |= FT260_FLAG_STOP;
 		} else {
-			rd_len = FT260_RD_DATA_MAX;
+			rd_len = rd_data_max;
 		}
+		rd_data_max = FT260_RD_DATA_MAX;
 
+		rep.report = FT260_I2C_READ_REQ;
 		rep.length = cpu_to_le16(rd_len);
 		rep.address = addr;
 		rep.flag = flag;
 
-		ft260_dbg("2 rep %#02x addr %#02x len %d rlen %d flag %#x\n",
+		ft260_dbg("rep %#02x addr %#02x len %d rlen %d flag %#x\n",
 			  rep.report, rep.address, len, rd_len, flag);
 
 		reinit_completion(&dev->wait);
 
+		dev->read_idx = 0;
 		dev->read_buf = data;
 		dev->read_len = rd_len;
 
-		ret = ft260_i2c_read_data(dev, &rep);
+		ret = ft260_hid_output_report(hdev, (u8 *)&rep, sizeof(rep));
 		if (ret < 0) {
-			dev->read_buf = NULL;
-			return ret;
+			hid_err(hdev, "%s: failed with %d\n", __func__, ret);
+			goto ft260_i2c_read_exit;
+		}
+
+		timeout = msecs_to_jiffies(5000);
+		if (!wait_for_completion_timeout(&dev->wait, timeout)) {
+			ret = -ETIMEDOUT;
+			ft260_i2c_reset(hdev);
+			goto ft260_i2c_read_exit;
+		}
+
+		dev->read_buf = NULL;
+
+		ret = ft260_xfer_status(dev);
+		if (ret < 0) {
+			ret = -EIO;
+			ft260_i2c_reset(hdev);
+			goto ft260_i2c_read_exit;
 		}
 
 		len -= rd_len;
 		data += rd_len;
-		flag = 0;
 
 	} while (len > 0);
 
-	return 0;
+ft260_i2c_read_exit:
+	dev->read_buf = NULL;
+	return ret;
 }
 
 /*
