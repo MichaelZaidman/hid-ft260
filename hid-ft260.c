@@ -34,6 +34,8 @@ MODULE_PARM_DESC(debug, "Toggle FT260 debugging messages");
 #define FT260_RD_DATA_MAX (256)
 #define FT260_WR_DATA_MAX (60)
 
+#define FT260_WAKEUP_NEEDED_AFTER_MS (4800) /* 5s minus 200ms margin */
+
 /*
  * Device interface configuration.
  * The FT260 has 2 interfaces that are controlled by DCNF0 and DCNF1 pins.
@@ -230,6 +232,7 @@ struct ft260_device {
 	u16 read_idx;
 	u16 read_len;
 	u16 clock;
+	unsigned long need_wakeup_at;
 };
 
 static int ft260_hid_feature_report_get(struct hid_device *hdev,
@@ -382,6 +385,11 @@ static int ft260_i2c_write(struct ft260_device *dev, u8 addr, u8 *data,
 	struct ft260_i2c_write_request_report *rep =
 		(struct ft260_i2c_write_request_report *)dev->write_buf;
 
+	if (time_is_before_jiffies(dev->need_wakeup_at)) {
+		(void)ft260_xfer_status(dev);
+		ft260_dbg("device wakeup");
+	}
+
 	do {
 		rep->flag = 0;
 		if (first) {
@@ -433,6 +441,11 @@ static int ft260_smbus_write(struct ft260_device *dev, u8 addr, u8 cmd,
 
 	if (data_len >= sizeof(rep->data))
 		return -EINVAL;
+
+	if (time_is_before_jiffies(dev->need_wakeup_at)) {
+		(void)ft260_xfer_status(dev);
+		ft260_dbg("device wakeup");
+	}
 
 	rep->address = addr;
 	rep->data[0] = cmd;
@@ -607,6 +620,8 @@ static int ft260_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 
 	ret = num;
 i2c_exit:
+	dev->need_wakeup_at =
+		jiffies + msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS);
 	hid_hw_power(hdev, PM_HINT_NORMAL);
 	mutex_unlock(&dev->lock);
 	return ret;
@@ -707,6 +722,8 @@ static int ft260_smbus_xfer(struct i2c_adapter *adapter, u16 addr, u16 flags,
 	}
 
 smbus_exit:
+	dev->need_wakeup_at =
+		jiffies + msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS);
 	hid_hw_power(hdev, PM_HINT_NORMAL);
 	mutex_unlock(&dev->lock);
 	return ret;
