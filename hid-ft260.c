@@ -486,21 +486,13 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 	int timeout, ret = 0;
 	struct ft260_i2c_read_request_report rep;
 	struct hid_device *hdev = dev->hdev;
-	bool first = true;
 	u8 bus_busy = 0;
 
+	if ((flag & FT260_FLAG_START_REPEATED) == FT260_FLAG_START_REPEATED)
+		flag = FT260_FLAG_START_REPEATED;
+	else
+		flag = FT260_FLAG_START;
 	do {
-		if (first) {
-			if (FT260_FLAG_START_REPEATED ==
-			    (FT260_FLAG_START_REPEATED & flag))
-				flag = FT260_FLAG_START_REPEATED;
-			else
-				flag = FT260_FLAG_START;
-			first = false;
-		} else {
-			flag = 0;
-		}
-
 		if (len <= rd_data_max) {
 			rd_len = len;
 			flag |= FT260_FLAG_STOP;
@@ -550,6 +542,7 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 
 		len -= rd_len;
 		data += rd_len;
+		flag = 0;
 
 	} while (len > 0);
 
