@@ -309,6 +309,20 @@ static int ft260_xfer_status(struct ft260_device *dev, u8 bus_busy)
 	struct ft260_get_i2c_status_report report;
 	int ret;
 
+	if (time_is_before_jiffies(dev->need_wakeup_at)) {
+		ret = ft260_hid_feature_report_get(hdev, FT260_I2C_STATUS,
+						(u8 *)&report, sizeof(report));
+		if (unlikely(ret < 0)) {
+			hid_err(hdev, "failed to retrieve status: %d, no wakeup\n",
+				ret);
+		} else {
+			dev->need_wakeup_at = jiffies +
+				msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS);
+			ft260_dbg("bus_status %#02x, wakeup\n",
+				  report.bus_status);
+		}
+	}
+
 	ret = ft260_hid_feature_report_get(hdev, FT260_I2C_STATUS,
 					   (u8 *)&report, sizeof(report));
 	if (unlikely(ret < 0)) {
@@ -411,11 +425,6 @@ static int ft260_i2c_write(struct ft260_device *dev, u8 addr, u8 *data,
 	if (len < 1)
 		return -EINVAL;
 
-	if (time_is_before_jiffies(dev->need_wakeup_at)) {
-		(void)ft260_xfer_status(dev, 0);
-		ft260_dbg("device wakeup");
-	}
-
 	rep->flag = FT260_FLAG_START;
 
 	do {
@@ -464,11 +473,6 @@ static int ft260_smbus_write(struct ft260_device *dev, u8 addr, u8 cmd,
 
 	if (data_len >= sizeof(rep->data))
 		return -EINVAL;
-
-	if (time_is_before_jiffies(dev->need_wakeup_at)) {
-		(void)ft260_xfer_status(dev, 0);
-		ft260_dbg("device wakeup");
-	}
 
 	rep->address = addr;
 	rep->data[0] = cmd;
@@ -640,8 +644,6 @@ static int ft260_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 
 	ret = num;
 i2c_exit:
-	dev->need_wakeup_at =
-		jiffies + msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS);
 	hid_hw_power(hdev, PM_HINT_NORMAL);
 	mutex_unlock(&dev->lock);
 	return ret;
@@ -742,8 +744,6 @@ static int ft260_smbus_xfer(struct i2c_adapter *adapter, u16 addr, u16 flags,
 	}
 
 smbus_exit:
-	dev->need_wakeup_at =
-		jiffies + msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS);
 	hid_hw_power(hdev, PM_HINT_NORMAL);
 	mutex_unlock(&dev->lock);
 	return ret;
