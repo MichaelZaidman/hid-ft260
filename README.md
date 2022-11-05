@@ -2,7 +2,7 @@
 
 ## Overview
 
-### FTDI FT260 USB HID to I2C host bridge Linux kernel driver
+### FTDI FT260 Linux kernel driver
 
 The FTDI FT260 chip implements USB to I2C/UART bridges through two
 USB HID class interfaces. The first - for I2C, and the second
@@ -40,12 +40,11 @@ Specs:
 
 The driver is merged into the Linux kernel 5.13 mainline.
 
-1. Kernel - [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/hid/hid-ft260.c?h=v5.13](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/drivers/hid/hid-ft260.c?h=v5.13)
-2. Commit - [https://lkml.org/lkml/2021/2/19/484](https://lkml.org/lkml/2021/2/19/484)
-3. The latest and greatest version of the driver is hosted in this repo.
-
+I continue to develop the driver in this repo for ease of review and collaboration, upstreaming the changes once they are mature enough.
 
 ## HOWTO
+
+### Getting started
 ```
 git clone https://github.com/MichaelZaidman/hid-ft260.git
 cd hid-ft260
@@ -64,4 +63,14 @@ As workaround you can comment two lines in the ft260_probe routine:
 ```
         if (!hid_is_usb(hdev))
                 return -EINVAL;
+```
+
+### How to change the I2C bus clock?
+
+You will need to figure out the ft260 device on the USB bus under sysfs.
+Once you find it, you will see all available attributes.
+For example, to set the i2c clock to 400KHz on my system, I run this command:
+
+```
+sudo bash -c 'echo 400 > /sys/bus/usb/devices/2-2/2-2\:1.0/0003\:0403\:6030.0002/clock'
 ```
