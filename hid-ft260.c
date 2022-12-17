@@ -52,6 +52,7 @@ MODULE_PARM_DESC(debug, "Toggle FT260 debugging messages");
 #define FT260_GPIO_MAX (6)
 #define FT260_GPIO_EX_MAX (8)
 #define FT260_GPIO_TOTAL (FT260_GPIO_MAX + FT260_GPIO_EX_MAX)
+#define FT260_GPIO_MASK (~(0xffff << FT260_GPIO_TOTAL))
 
 /*
  * Device interface configuration.
@@ -172,12 +173,17 @@ enum {
 	FT260_GPIO_F			= (1 << (FT260_GPIO_MAX + 5)),
 	FT260_GPIO_G			= (1 << (FT260_GPIO_MAX + 6)),
 	FT260_GPIO_H			= (1 << (FT260_GPIO_MAX + 7)),
+};
+
+/* GPIO groups */
+enum {
 	FT260_GPIO_WAKEUP		= (FT260_GPIO_3),
-	FT260_GPIO_I2C			= (FT260_GPIO_0 | FT260_GPIO_1 ),
-	FT260_GPIO_UART_DCD_RI		= (FT260_GPIO_4 | FT260_GPIO_5 ),
-	FT260_GPIO_UART			= (FT260_GPIO_B | FT260_GPIO_E |
-					   FT260_GPIO_F | FT260_GPIO_H ),
-	FT260_GPIO_DEFAULT		= (FT260_GPIO_UART |
+	FT260_GPIO_I2C_DEFAULT		= (FT260_GPIO_0 | FT260_GPIO_1),
+	FT260_GPIO_UART_DCD_RI		= (FT260_GPIO_4 | FT260_GPIO_5),
+	FT260_GPIO_UART			= (FT260_GPIO_B | FT260_GPIO_C |
+					   FT260_GPIO_D | FT260_GPIO_E |
+					   FT260_GPIO_F | FT260_GPIO_H),
+	FT260_GPIO_UART_DEFAULT		= (FT260_GPIO_UART |
 					   FT260_GPIO_UART_DCD_RI),
 };
 
@@ -858,17 +864,27 @@ static const struct i2c_algorithm ft260_i2c_algo = {
 	.functionality = ft260_functionality,
 };
 
+
 static int ft260_gpio_chip_match_name(struct gpio_chip *chip, void *data)
 {
 	return !strcmp(chip->label, data);
 }
 
+/* Should be called from within the locked context */
+static void ft260_gpio_en_set(struct ft260_device *dev, u16 bitmap)
+{
+	dev->gpio_en |= bitmap & FT260_GPIO_MASK;
+}
+
+/* Should be called from within the locked context */
+static void ft260_gpio_en_clr(struct ft260_device *dev, u16 bitmap)
+{
+	dev->gpio_en &= ~bitmap & FT260_GPIO_MASK;
+}
+
 /*
  * For GPIO, we use hid_hw_raw_request directly with preallocated buffer to not
  * interfere with i2c operation.
- * TODO: Consider adding gpio_lock.
- * TODO: consider replacing ft260_gpio_read_request_report and
- * ft260_gpio_write_request_report with a single ft260_gpio_request_report.
  */
 static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 {
@@ -1073,28 +1089,28 @@ static int ft260_get_system_config(struct hid_device *hdev,
 	return 0;
 }
 
-static int ft260_is_interface_enabled(struct hid_device *hdev)
+static int ft260_is_interface_enabled(struct hid_device *hdev,
+				struct ft260_get_system_status_report *cfg)
 {
-	struct ft260_get_system_status_report cfg;
 	struct usb_interface *usbif = to_usb_interface(hdev->dev.parent);
 	int interface = usbif->cur_altsetting->desc.bInterfaceNumber;
 	int ret;
 
-	ret = ft260_get_system_config(hdev, &cfg);
+	ret = ft260_get_system_config(hdev, cfg);
 	if (ret < 0)
 		return ret;
 
 	ft260_dbg("interface:  0x%02x\n", interface);
-	ft260_dbg("chip mode:  0x%02x\n", cfg.chip_mode);
-	ft260_dbg("clock_ctl:  0x%02x\n", cfg.clock_ctl);
-	ft260_dbg("i2c_enable: 0x%02x\n", cfg.i2c_enable);
-	ft260_dbg("uart_mode:  0x%02x\n", cfg.uart_mode);
-	ft260_dbg("gpio2_func: 0x%02x\n", cfg.gpio2_function);
-	ft260_dbg("gpioA_func: 0x%02x\n", cfg.gpioA_function);
-	ft260_dbg("gpioG_func: 0x%02x\n", cfg.gpioA_function);
-	ft260_dbg("wakeup_int: 0x%02x\n", cfg.enable_wakeup_int);
+	ft260_dbg("chip mode:  0x%02x\n", cfg->chip_mode);
+	ft260_dbg("clock_ctl:  0x%02x\n", cfg->clock_ctl);
+	ft260_dbg("i2c_enable: 0x%02x\n", cfg->i2c_enable);
+	ft260_dbg("uart_mode:  0x%02x\n", cfg->uart_mode);
+	ft260_dbg("gpio2_func: 0x%02x\n", cfg->gpio2_function);
+	ft260_dbg("gpioA_func: 0x%02x\n", cfg->gpioA_function);
+	ft260_dbg("gpioG_func: 0x%02x\n", cfg->gpioG_function);
+	ft260_dbg("wakeup_int: 0x%02x\n", cfg->enable_wakeup_int);
 
-	switch (cfg.chip_mode) {
+	switch (cfg->chip_mode) {
 	case FT260_MODE_ALL:
 	case FT260_MODE_BOTH:
 		if (interface == 1)
@@ -1256,6 +1272,7 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct ft260_device *dev;
 	struct ft260_get_chip_version_report version;
+	struct ft260_get_system_status_report cfg;
 	struct gpio_chip *chip;
 	int ret;
 
@@ -1295,7 +1312,7 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		 version.chip_code[0], version.chip_code[1],
 		 version.chip_code[2], version.chip_code[3]);
 
-	ret = ft260_is_interface_enabled(hdev);
+	ret = ft260_is_interface_enabled(hdev, &cfg);
 	if (ret <= 0)
 		goto err_hid_close;
 
@@ -1339,7 +1356,27 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 
 	hid_info(hdev, "initialize gpio chip\n");
 
-	dev->gpio_en = FT260_GPIO_DEFAULT;
+	if (cfg.chip_mode) {
+		if (!(cfg.chip_mode & FT260_MODE_UART))
+			dev->gpio_en |= FT260_GPIO_UART_DEFAULT;
+
+		if (!(cfg.chip_mode & FT260_MODE_I2C))
+			dev->gpio_en |= FT260_GPIO_I2C_DEFAULT;
+	}
+
+	if (cfg.gpio2_function == FT260_MFPIN_GPIO)
+		dev->gpio_en |= FT260_GPIO_2;
+
+	if (cfg.enable_wakeup_int == FT260_MFPIN_GPIO)
+		dev->gpio_en |= FT260_GPIO_3;
+
+	if (cfg.gpioA_function == FT260_MFPIN_GPIO)
+		dev->gpio_en |= FT260_GPIO_A;
+
+	if (cfg.gpioG_function == FT260_MFPIN_GPIO)
+		dev->gpio_en |= FT260_GPIO_G;
+
+	hid_info(hdev, "enabled GPIOs: %04x\n", dev->gpio_en);
 
 	dev->gc = devm_kzalloc(&hdev->dev, sizeof(*dev->gc), GFP_KERNEL);
 	if (!dev->gc) {
