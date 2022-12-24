@@ -11,11 +11,10 @@ as a separate USB hidraw device. In addition, the chip implements
 14 GPIOs via multifunctional pins.
 
 Current status:
-1. The initial version of the USB HID to I2C bridge is merged into the kernel 5.13 mainline.
-2. The "HID: ft260: fixes and performance improvements" patch set is queued into the kernel 6.2 release.
-3. The initial GPIO support is developed in the gpio branch of this repo.
-4. The initial UART support is discussed in the kernel mailing lists.
-5. I continue developing the driver in this repo, upstreaming the changes once they are mature enough.
+1. I2C: initial version is merged into the kernel 5.13 mainline. Multiple fixes and performance improvements patch set is queued into the kernel 6.2 release.
+2. GPIO: initial code, developed in the gpio branch, is merged into main branch of this repo.
+3. UART: initial UART support is discussing in the kernel mailing lists.
+4. I continue developing the driver in this repo, upstreaming the changes once they are mature enough.
 
 FTDI suggests using hidraw and libusb userspace libraries to operate the
 FT260 I2C host controller via hidraw Linux kernel driver. But this
