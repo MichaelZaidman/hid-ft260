@@ -5,12 +5,19 @@
 ### FTDI FT260 Linux kernel driver
 
 The FTDI FT260 chip implements USB to I2C/UART bridges through two
-USB HID class interfaces. The first - for I2C, and the second
+USB HID class interfaces. The first - is for I2C and the second
 for UART. Each interface is independent, and the kernel detects it
-as a separate USB hidraw device.
+as a separate USB hidraw device. In addition, the chip implements
+14 GPIOs via multifunctional pins.
 
-There is no Linux I2C controller driver for this chip to date, and FTDI
-suggests using hidraw and libusb userspace libraries to operate the
+Current status:
+1. The initial version of the USB HID to I2C bridge is merged into the kernel 5.13 mainline.
+2. The "HID: ft260: fixes and performance improvements" patch set is queued into the kernel 6.2 release.
+3. The initial GPIO support is developed in the gpio branch of this repo.
+4. The initial UART support is discussed in the kernel mailing lists.
+5. I continue developing the driver in this repo, upstreaming the changes once they are mature enough.
+
+FTDI suggests using hidraw and libusb userspace libraries to operate the
 FT260 I2C host controller via hidraw Linux kernel driver. But this
 approach makes the standard Linux I2C tools useless, and it does not
 allow the I2C sysfs tree instantiation required by I2C multiplexers
@@ -38,10 +45,6 @@ Specs:
 1. [DS_FT260.pdf](https://ftdichip.com/wp-content/uploads/2020/07/DS_FT260.pdf)
 2. [AN_394_User_Guide_for_FT260.pdf](https://www.ftdichip.com/Support/Documents/AppNotes/AN_394_User_Guide_for_FT260.pdf)
 
-The driver is merged into the Linux kernel 5.13 mainline.
-
-I continue to develop the driver in this repo for ease of review and collaboration, upstreaming the changes once they are mature enough.
-
 ## HOWTO
 
 ### Getting started
@@ -65,12 +68,36 @@ As workaround you can comment two lines in the ft260_probe routine:
                 return -EINVAL;
 ```
 
-### How to change the I2C bus clock?
+### Change the I2C bus clock
 
 You will need to figure out the ft260 device on the USB bus under sysfs.
 Once you find it, you will see all available attributes.
 For example, to set the i2c clock to 400KHz on my system, I run this command:
 
 ```
-sudo bash -c 'echo 400 > /sys/bus/usb/devices/2-2/2-2\:1.0/0003\:0403\:6030.0002/clock'
+sudo bash -c 'echo 400 > /sys/bus/usb/devices/2-2\:1.0/0003\:0403\:6030.0002/clock'
+```
+
+### Set the multifunctional pin as GPIO
+
+The FT260 has three pins that have more than two functions: DIO7 (pin 14),
+DIO0 (pin 7), and DIO12 (pin 27). The function of these pins can be configured
+by eFUSE, EEPROM, or via the sysfs interface:
+
+In this example, I configure pin 14 to act as GPIO2:
+
+```
+$ cat /sys/bus/usb/devices/2-2\:1.0/0003\:0403\:6030.0002/gpio2_func
+1
+$ sudo bash -c "echo 0 > /sys/bus/usb/devices/2-2\:1.0/0003\:0403\:6030.0002/gpio2_func"
+$ cat /sys/bus/usb/devices/2-2\:1.0/0003\:0403\:6030.0002/gpio2_func
+0
+$ sudo gpioget 0 2
+0
+$ sudo gpioset 0 2=1
+$ sudo gpioget 0 2
+1
+$ sudo gpioset 0 2=0
+$ sudo gpioget 0 2
+0
 ```
