@@ -109,16 +109,14 @@ i2c-7
 i2c-8
 i2c-9
 ```
-3. Use the udevadm utility to query the device path in sysfs providing the name of the device node we found in the previous step.
+3. Run the below script to set the `SYSFS_FT260` environment variable with the sysfs device path. You will need to replace the `i2c-14` with the name of the device node you found in the previous step.
 ```
-michael@m1:/$ udevadm info --query=all --name=i2c-14 | grep P: | grep -o -P '(?<=usb).*(?=i2c-dev)' | grep -o -P '(?<=/).*(?=i2c)' | echo "/sys/bus/usb/devices/"$(</dev/stdin)
-
-/sys/bus/usb/devices/3-3/3-3.1/3-3.1:1.0/0003:0403:6030.0007/
+SYSFS_FT260=$(udevadm info --query=all --name=i2c-14 | grep P: | grep -o -P '(?<=usb).*(?=i2c-dev)' | grep -o -P '(?<=/).*(?=i2c)' | echo "/sys/bus/usb/devices/"$(</dev/stdin)); echo $SYSFS_FT260
 ```
 
-4. See availiable driver's attributes:  
+4. See all availiable driver's attributes:
 ```
-michael@m1:/$ ls /sys/bus/usb/devices/usb3/3-3/3-3.1/3-3.1:1.0/0003:0403:6030.0007/
+michael@m1:/$ ls $SYSFS_FT260
 chip_mode  clock  clock_ctl  driver  gpio  gpio2_func  gpioa_func  gpiochip0  gpiog_func  hid_over_i2c_en  i2c-14  i2c_enable  i2c_reset  modalias  power  power_saving_en  pwren_status  report_descriptor  subsystem  suspend_status  uart_mode  uevent
 ```
     
@@ -129,7 +127,7 @@ Figure out the sysfs ft260 device node path, as explained earlier.
 To set the i2c clock to 400KHz on my system, I run this command:
 
 ```
-sudo bash -c 'echo 400 > /sys/bus/usb/devices/3-3/3-3.1/3-3.1:1.0/0003:0403:6030.0007/clock'
+sudo bash -c 'echo 400 > $SYSFS_FT260/clock'
 ```
 
 ### Set a multifunctional pin as GPIO
@@ -143,10 +141,10 @@ For the sysfs method, you need to figure out the sysfs ft260 device node path, a
 In this example, I configure pin 14 to act as GPIO2:
 
 ```
-$ cat /sys/bus/usb/devices/usb3/3-3/3-3.1/3-3.1:1.0/0003:0403:6030.0007/gpio2_func
+$ cat $SYSFS_FT260/gpio2_func
 1
-$ sudo bash -c "echo 0 > /sys/bus/usb/devices/usb3/3-3/3-3.1/3-3.1:1.0/0003:0403:6030.0007/gpio2_func"
-$ cat /sys/bus/usb/devices/usb3/3-3/3-3.1/3-3.1:1.0/0003:0403:6030.0007/gpio2_func
+$ sudo bash -c "echo 0 > $SYSFS_FT260/gpio2_func"
+$ cat $SYSFS_FT260/gpio2_func
 0
 $ sudo gpioget 0 2
 0
