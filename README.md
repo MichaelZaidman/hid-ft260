@@ -69,57 +69,20 @@ As workaround you can comment two lines in the ft260_probe routine:
 
 ### Configure ft260 device via sysfs
 The driver exposes multiple attributes to user space via sysfs.
-Since the order and number of USB devices vary between systems, the sysfs path to the USB device may change even on the same system.
 
-To figure out the sysfs path to the ft260 device node, do the following:
-1. Disconnect the device and get a list of the instantiated i2c devices. Remember the last device. In my case, it is `i2c-13`
+Since the order and number of the USB devices vary between systems, the sysfs path to the USB device may change even on the same system.
+
+Run the below command to set the `SYSFS_FT260` environment variable with the sysfs FT260 device path:
 ```
-michael@m1:/$ ls /dev | grep i2c
-i2c-0
-i2c-1
-i2c-10
-i2c-11
-i2c-12
-i2c-13
-i2c-2
-i2c-3
-i2c-4
-i2c-5
-i2c-6
-i2c-7
-i2c-8
-i2c-9
-```
-2. Connect the ft260 and query a list of the instantiated i2c devices again. We can see that the hid-ft260 driver instantiated the `i2c-14` device. 
-```
-michael@m1:/$ ls /dev | grep i2c
-i2c-0
-i2c-1
-i2c-10
-i2c-11
-i2c-12
-i2c-13
-i2c-14
-i2c-2
-i2c-3
-i2c-4
-i2c-5
-i2c-6
-i2c-7
-i2c-8
-i2c-9
-```
-3. Run the below script to set the `SYSFS_FT260` environment variable with the sysfs device path. You will need to replace the `i2c-14` with the name of the device node you found in the previous step.
-```
-SYSFS_FT260=$(udevadm info --query=all --name=i2c-14 | grep P: | grep -o -P '(?<=usb).*(?=i2c-dev)' | grep -o -P '(?<=/).*(?=i2c)' | echo "/sys/bus/usb/devices/"$(</dev/stdin)); echo $SYSFS_FT260
+SYSFS_FT260=$(d=$(ls /sys/bus/hid/drivers/ft260 | grep '0403:6030'); echo /sys/bus/hid/drivers/ft260/$d)
 ```
 
-4. See all availiable driver's attributes:
+Now we can see all availiable driver's attributes:
 ```
-michael@m1:/$ ls $SYSFS_FT260
-chip_mode  clock  clock_ctl  driver  gpio  gpio2_func  gpioa_func  gpiochip0  gpiog_func  hid_over_i2c_en  i2c-14  i2c_enable  i2c_reset  modalias  power  power_saving_en  pwren_status  report_descriptor  subsystem  suspend_status  uart_mode  uevent
+$ ls $SYSFS_FT260
 ```
-    
+
+Please do not forget to set the `SYSFS_FT260` again after reconnecting the FT260 USB connector since the sysfs path changed.
 
 ### Change I2C bus clock
 
