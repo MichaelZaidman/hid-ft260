@@ -870,13 +870,11 @@ static int ft260_gpio_chip_match_name(struct gpio_chip *chip, void *data)
 	return !strcmp(chip->label, data);
 }
 
-/* Should be called from within the locked context */
 static void ft260_gpio_en_set(struct ft260_device *dev, u16 bitmap)
 {
 	dev->gpio_en |= bitmap & FT260_GPIO_MASK;
 }
 
-/* Should be called from within the locked context */
 static void ft260_gpio_en_clr(struct ft260_device *dev, u16 bitmap)
 {
 	dev->gpio_en &= ~bitmap & FT260_GPIO_MASK;
@@ -901,12 +899,10 @@ static void ft260_gpio_en_update(struct hid_device *hdev, u8 req, u8 value)
 		return;
 	}
 
-	mutex_lock(&dev->lock);
 	if (value == FT260_MFPIN_GPIO)
 		ft260_gpio_en_set(dev, bitmap);
 	else
 		ft260_gpio_en_clr(dev, bitmap);
-	mutex_unlock(&dev->lock);
 
 	hid_info(hdev, "enabled GPIOs: %04x\n", dev->gpio_en);
 }
@@ -923,11 +919,6 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 	struct ft260_device *dev = gpiochip_get_data(gc);
 	struct hid_device *hdev = dev->hdev;
 
-	if (!(dev->gpio_en & (1 << offset))) {
-		hid_err(hdev, "%s: wrong pin function %d\n", __func__, offset);
-		return;
-	}
-
 	if (offset >= FT260_GPIO_TOTAL) {
 		hid_err(hdev, "%s: invalid offset %d\n", __func__, offset);
 		return;
@@ -936,6 +927,11 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 	ft260_dbg("offset %d val %d\n", offset, value);
 
 	mutex_lock(&dev->lock);
+
+	if (!(dev->gpio_en & (1 << offset))) {
+		hid_err(hdev, "%s: wrong pin function %d\n", __func__, offset);
+		goto exit;
+	}
 
 	rep = (struct ft260_gpio_write_request_report *)&dev->feature_buf;
 
@@ -962,11 +958,11 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 				 HID_FEATURE_REPORT, HID_REQ_SET_REPORT);
 	if (ret < 0) {
 		hid_err(hdev, "%s: error setting GPIO: %d\n", __func__, ret);
-		mutex_unlock(&dev->lock);
-		return;
+		goto exit;
 	}
 
 	dev->gpio = rep->gpio;
+exit:
 	mutex_unlock(&dev->lock);
 }
 
@@ -980,11 +976,6 @@ static int ft260_gpio_direction_set(struct gpio_chip *gc, u32 offset,
 	struct ft260_device *dev = gpiochip_get_data(gc);
 	struct hid_device *hdev = dev->hdev;
 
-	if (!(dev->gpio_en & (1 << offset))) {
-		hid_err(hdev, "%s: wrong pin function %d\n", __func__, offset);
-		return -EIO;
-	}
-
 	if (offset >= FT260_GPIO_TOTAL) {
 		hid_err(hdev, "%s: invalid offset %d\n", __func__, offset);
 		return -EINVAL;
@@ -992,9 +983,16 @@ static int ft260_gpio_direction_set(struct gpio_chip *gc, u32 offset,
 
 	ft260_dbg("offset %d val %d direction %d\n", offset, value, direction);
 
+	mutex_lock(&dev->lock);
+
+	if (!(dev->gpio_en & (1 << offset))) {
+		hid_err(hdev, "%s: wrong pin function %d\n", __func__, offset);
+		ret = -EIO;
+		goto exit;
+	}
+
 	buf = (u8 *)&dev->feature_buf;
 
-	mutex_lock(&dev->lock);
 	ret = hid_hw_raw_request(hdev, FT260_GPIO, buf, len,
 				 HID_FEATURE_REPORT, HID_REQ_GET_REPORT);
 	if (ret != len) {
@@ -1212,6 +1210,7 @@ static void ft260_attr_dummy_func(struct hid_device *hdev, u8 req, u16 value)
 	{								       \
 		struct reptype rep;					       \
 		struct hid_device *hdev = to_hid_device(kdev);		       \
+		struct ft260_device *dev = hid_get_drvdata(hdev);	       \
 		type name;						       \
 		int ret;						       \
 									       \
@@ -1219,12 +1218,14 @@ static void ft260_attr_dummy_func(struct hid_device *hdev, u8 req, u16 value)
 			rep.name = name;				       \
 			rep.report = id;				       \
 			rep.request = req;				       \
+			mutex_lock(&dev->lock);				       \
 			ret = ft260_hid_feature_report_set(hdev, (u8 *)&rep,   \
 							   sizeof(rep));       \
 			if (ret < 0)					       \
 				hid_err(hdev, "%s: failed!\n", __func__);      \
 			else						       \
 				func(hdev, req, name);			       \
+			mutex_unlock(&dev->lock);			       \
 		} else {						       \
 			ret = -EINVAL;					       \
 		}							       \
