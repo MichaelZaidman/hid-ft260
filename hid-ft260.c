@@ -1090,7 +1090,7 @@ static int ft260_gpio_get_direction(struct gpio_chip *gc, u32 offset)
 	int ret = ft260_gpio_get_all(gc, FT260_GPIO_DIRECTION);
 	if (ret < 0)
 		return ret;
-	return (ret >> offset) & 1;
+	return ~((ret >> offset) & 1);
 }
 
 static int ft260_gpio_get(struct gpio_chip *gc, u32 offset)
