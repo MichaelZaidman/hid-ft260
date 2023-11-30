@@ -3,7 +3,7 @@ KBUILD ?= /lib/modules/$(KRELEASE)/build
 obj-m += hid-ft260.o
 
 all:
-	$(MAKE) -C $(KBUILD) M=$(PWD) modules
+	$(MAKE) -C $(KBUILD) M=$(shell pwd) modules
 
 clean:
-	$(MAKE) -C $(KBUILD) M=$(PWD) clean
+	$(MAKE) -C $(KBUILD) M=$(shell pwd) clean
