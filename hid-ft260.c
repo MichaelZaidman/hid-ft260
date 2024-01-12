@@ -1220,8 +1220,8 @@ static int ft260_uart_receive_chars(struct ft260_device *port,
 	return ret;
 }
 
-static ssize_t ft260_uart_write(struct tty_struct *tty, const unsigned char *buf,
-			     size_t count)
+static int ft260_uart_write(struct tty_struct *tty, const unsigned char *buf,
+			    int count)
 {
 	struct ft260_device *port = tty->driver_data;
 	struct hid_device *hdev = port->hdev;
