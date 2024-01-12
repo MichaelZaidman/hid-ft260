@@ -1228,7 +1228,7 @@ static int ft260_uart_write(struct tty_struct *tty, const unsigned char *buf,
 	int len, ret;
 
 	len = kfifo_in_locked(&port->xmit_fifo, buf, count, &port->write_lock);
-	ft260_dbg("count: %ld, len: %d", count, len);
+	ft260_dbg("count: %d, len: %d", count, len);
 
 	ret = ft260_uart_transmit_chars(port);
 	if (ret < 0) {
