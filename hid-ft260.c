@@ -1755,6 +1755,8 @@ static int ft260_raw_event(struct hid_device *hdev, struct hid_report *report,
 		if (dev->read_idx == dev->read_len)
 			complete(&dev->wait);
 
+		return 0;
+
 	} else if (xfer->length > FT260_RD_DATA_MAX) {
 		hid_err(hdev, "Received data too long (%d)\n", xfer->length);
 		return -EBADR;
