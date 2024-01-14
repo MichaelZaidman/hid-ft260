@@ -1202,16 +1202,11 @@ static int ft260_uart_receive_chars(struct ft260_device *port,
 				    u8 *data, u8 length)
 {
 	struct hid_device *hdev = port->hdev;
-	int ret = 0;
-
-	if (length > FT260_RD_DATA_MAX) {
-		hid_err(hdev, "Received too much data (%d)\n", length);
-		return -EBADR;
-	}
+	int ret;
 
 	ret = tty_insert_flip_string(&port->port, data, length);
 	if (ret != length)
-		hid_err(hdev, "%d char not inserted to flip buffer\n", length - ret);
+		hid_dbg(hdev, "%d char not inserted to flip buffer\n", length - ret);
 	port->icount.rx += ret;
 
 	if (ret)
