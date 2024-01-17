@@ -1575,7 +1575,7 @@ static int ft260_uart_probe(struct hid_device *hdev, struct ft260_device *dev)
 	INIT_WORK(&dev->wakeup_work, ft260_uart_do_wakeup);
 	// FIXME: Do I need that if I have cancel_work_sync?
 	// FIXME: are all kfifo access secured by lock? with irq or not?
-	dev->reschedule_work = false;
+	dev->reschedule_work = true;
 	/* Work not started at this point */
 	timer_setup(&dev->wakeup_timer, ft260_uart_start_wakeup, 0);
 
