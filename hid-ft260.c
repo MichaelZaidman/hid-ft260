@@ -296,6 +296,8 @@ enum {
 	FT260_CFG_BAUD_MAX		= 12000000,
 };
 
+#define FT260_UART_EN_PW_SAVE_BAUD	4800
+
 static const struct hid_device_id ft260_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_FUTURE_TECHNOLOGY,
 			 USB_DEVICE_ID_FT260) },
@@ -1056,6 +1058,15 @@ static const struct attribute_group ft260_attr_group = {
 static DEFINE_MUTEX(ft260_uart_list_lock);
 static LIST_HEAD(ft260_uart_device_list);
 
+static void ft260_uart_wakeup(struct ft260_device *dev);
+
+static void ft260_uart_wakeup_workaraund_enable(struct ft260_device *port,
+						bool enable)
+{
+	port->reschedule_work = enable;
+	ft260_dbg("%s wakeup workaround", enable ? "Activate" : "Deactivate");
+}
+
 static struct ft260_device *ft260_dev_by_index(int index)
 {
 	struct ft260_device *port;
@@ -1108,7 +1119,7 @@ static void ft260_uart_port_remove(struct ft260_device *port)
 	spin_unlock(&port->write_lock);
 
 	mutex_lock(&port->port.mutex);
-	port->reschedule_work = false;
+	ft260_uart_wakeup_workaraund_enable(port, false);
 	tty_port_tty_hangup(&port->port, false);
 	mutex_unlock(&port->port.mutex);
 
@@ -1266,7 +1277,10 @@ static int ft260_uart_change_speed(struct ft260_device *port,
 	struct hid_device *hdev = port->hdev;
 	unsigned int baud;
 	struct ft260_configure_uart_request req;
+	bool wakeup_workaraund = false;
 	int ret;
+
+	ft260_uart_wakeup(port);
 
 	memset(&req, 0, sizeof(req));
 
@@ -1309,6 +1323,12 @@ static int ft260_uart_change_speed(struct ft260_device *port,
 		tty_encode_baud_rate(tty, baud, baud);
 		tty_kref_put(tty);
 	}
+
+	if (baud > FT260_UART_EN_PW_SAVE_BAUD)
+		wakeup_workaraund = true;
+
+	ft260_uart_wakeup_workaraund_enable(port, wakeup_workaraund);
+
 	put_unaligned_le32(cpu_to_le32(baud), &req.baudrate);
 
 	if (termios->c_cflag & CRTSCTS)
@@ -1435,13 +1455,13 @@ static const struct tty_operations ft260_uart_ops = {
 
 /* The FT260 has a "power saving mode" that causes the device to switch
  * to a 30 kHz oscillator if there's no activity for 5 seconds.
- * Unfortunately this mode can only be disabled by reprogramming
+ * Unfortunately, this mode can only be disabled by reprogramming
  * internal fuses, which requires an additional programming voltage.
  *
- * One effect of this mode is to cause data loss on a fast UART that
- * transmits after being idle for longer than 5 seconds. We work around
- * this by sending a dummy report at least once per 4 seconds if the
- * UART is in use.
+ * One effect of this mode is to cause data loss on an Rx line at baud
+ * rates higher than 4800 after being idle for longer than 5 seconds.
+ * We work around this by sending a dummy report at least once per 4.8
+ * seconds if the UART is in use.
  */
 static void ft260_uart_start_wakeup(struct timer_list *t)
 {
@@ -1455,10 +1475,8 @@ static void ft260_uart_start_wakeup(struct timer_list *t)
 	}
 }
 
-static void ft260_uart_do_wakeup(struct work_struct *work)
+static void ft260_uart_wakeup(struct ft260_device *dev)
 {
-	struct ft260_device *dev =
-		container_of(work, struct ft260_device, wakeup_work);
 	struct ft260_get_chip_version_report version;
 	int ret;
 
@@ -1472,12 +1490,20 @@ static void ft260_uart_do_wakeup(struct work_struct *work)
 	}
 }
 
+static void ft260_uart_do_wakeup(struct work_struct *work)
+{
+	struct ft260_device *dev =
+		container_of(work, struct ft260_device, wakeup_work);
+
+	ft260_uart_wakeup(dev);
+}
+
 static void ft260_uart_shutdown(struct tty_port *tport)
 {
 	struct ft260_device *port =
 		container_of(tport, struct ft260_device, port);
 
-	port->reschedule_work = false;
+	ft260_uart_wakeup_workaraund_enable(port, false);
 }
 
 static int ft260_uart_activate(struct tty_port *tport, struct tty_struct *tty)
@@ -1575,7 +1601,7 @@ static int ft260_uart_probe(struct hid_device *hdev, struct ft260_device *dev)
 	INIT_WORK(&dev->wakeup_work, ft260_uart_do_wakeup);
 	// FIXME: Do I need that if I have cancel_work_sync?
 	// FIXME: are all kfifo access secured by lock? with irq or not?
-	dev->reschedule_work = true;
+	ft260_uart_wakeup_workaraund_enable(dev, true);
 	/* Work not started at this point */
 	timer_setup(&dev->wakeup_timer, ft260_uart_start_wakeup, 0);
 
