@@ -323,6 +323,7 @@ struct ft260_device {
 	struct timer_list wakeup_timer;
 	struct work_struct wakeup_work;
 	bool reschedule_work;
+	bool power_saving_en;
 
 	struct completion wait;
 	struct mutex lock;
@@ -889,6 +890,7 @@ static int ft260_get_interface_type(struct hid_device *hdev, struct ft260_device
 	ft260_dbg("uart_mode:  0x%02x\n", cfg.uart_mode);
 
 	dev->ft260_is_serial = false;
+	dev->power_saving_en = cfg.power_saving_en;
 
 	switch (cfg.chip_mode) {
 	case FT260_MODE_ALL:
@@ -1063,8 +1065,11 @@ static void ft260_uart_wakeup(struct ft260_device *dev);
 static void ft260_uart_wakeup_workaraund_enable(struct ft260_device *port,
 						bool enable)
 {
-	port->reschedule_work = enable;
-	ft260_dbg("%s wakeup workaround", enable ? "Activate" : "Deactivate");
+	if (port->power_saving_en) {
+		port->reschedule_work = enable;
+		ft260_dbg("%s wakeup workaround",
+			  enable ? "Activate" : "Deactivate");
+	}
 }
 
 static struct ft260_device *ft260_dev_by_index(int index)
