@@ -1524,7 +1524,6 @@ static int ft260_uart_activate(struct tty_port *tport, struct tty_struct *tty)
 	kfifo_reset(&port->xmit_fifo);
 	spin_unlock(&port->write_lock);
 
-	ft260_uart_change_speed(port, &tty->termios, NULL);
 	clear_bit(TTY_IO_ERROR, &tty->flags);
 
 	/* Wake up the chip as early as possible to not miss incoming data */
