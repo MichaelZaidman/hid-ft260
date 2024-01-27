@@ -1285,8 +1285,6 @@ static int ft260_uart_change_speed(struct ft260_device *port,
 	bool wakeup_workaraund = false;
 	int ret;
 
-	ft260_uart_wakeup(port);
-
 	memset(&req, 0, sizeof(req));
 
 	req.report = FT260_SYSTEM_SETTINGS;
@@ -1528,6 +1526,9 @@ static int ft260_uart_activate(struct tty_port *tport, struct tty_struct *tty)
 
 	ft260_uart_change_speed(port, &tty->termios, NULL);
 	clear_bit(TTY_IO_ERROR, &tty->flags);
+
+	/* Wake up the chip as early as possible to not miss incoming data */
+	ft260_uart_wakeup(port);
 
 	if (port->reschedule_work) {
 		mod_timer(&port->wakeup_timer, jiffies +
