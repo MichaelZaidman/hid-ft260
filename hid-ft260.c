@@ -1124,7 +1124,6 @@ static void ft260_uart_port_remove(struct ft260_device *port)
 	spin_unlock(&port->write_lock);
 
 	mutex_lock(&port->port.mutex);
-	ft260_uart_wakeup_workaraund_enable(port, false);
 	tty_port_tty_hangup(&port->port, false);
 	mutex_unlock(&port->port.mutex);
 
