@@ -309,7 +309,7 @@ struct ft260_device {
 	struct i2c_adapter adap;
 	struct hid_device *hdev;
 
-	bool ft260_is_serial;
+	int iface_type;
 	struct list_head device_list;
 
 	/* tty_port lifetime is equal to device lifetime */
@@ -889,28 +889,25 @@ static int ft260_get_interface_type(struct hid_device *hdev, struct ft260_device
 	ft260_dbg("i2c_enable: 0x%02x\n", cfg.i2c_enable);
 	ft260_dbg("uart_mode:  0x%02x\n", cfg.uart_mode);
 
-	dev->ft260_is_serial = false;
 	dev->power_saving_en = cfg.power_saving_en;
 
 	switch (cfg.chip_mode) {
 	case FT260_MODE_ALL:
 	case FT260_MODE_BOTH:
-		if (interface == 1) {
+		if (interface == 1)
 			ret = FT260_IFACE_UART;
-			dev->ft260_is_serial = true;
-		} else {
+		else
 			ret = FT260_IFACE_I2C;
-		}
 		break;
 	case FT260_MODE_UART:
 		ret = FT260_IFACE_UART;
-		dev->ft260_is_serial = true;
 		break;
 	case FT260_MODE_I2C:
 		ret = FT260_IFACE_I2C;
 		break;
 	}
 
+	dev->iface_type = ret;
 	return ret;
 }
 
@@ -1713,15 +1710,12 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	mutex_init(&dev->lock);
 	init_completion(&dev->wait);
 
-	if (!dev->ft260_is_serial) {
+	if (ret == FT260_IFACE_I2C)
 		ret = ft260_i2c_probe(hdev, dev);
-		if (ret)
-			goto err_hid_close;
-	} else {
+	else
 		ret = ft260_uart_probe(hdev, dev);
-		if (ret)
-			goto err_hid_close;
-	}
+	if (ret)
+		goto err_hid_close;
 
 	return 0;
 
@@ -1742,7 +1736,7 @@ static void ft260_remove(struct hid_device *hdev)
 	if (!dev)
 		return;
 
-	if (dev->ft260_is_serial) {
+	if (dev->iface_type == FT260_IFACE_UART) {
 		// FIXME:
 		cancel_work_sync(&dev->wakeup_work);
 		tty_port_unregister_device(&dev->port, ft260_tty_driver,
