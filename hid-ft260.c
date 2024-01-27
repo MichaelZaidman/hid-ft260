@@ -1585,7 +1585,6 @@ static int ft260_uart_probe(struct hid_device *hdev, struct ft260_device *dev)
 	struct device *devt;
 
 	INIT_WORK(&dev->wakeup_work, ft260_uart_do_wakeup);
-	// FIXME: Do I need that if I have cancel_work_sync?
 	// FIXME: are all kfifo access secured by lock? with irq or not?
 	ft260_uart_wakeup_workaraund_enable(dev, true);
 	/* Work not started at this point */
@@ -1721,7 +1720,6 @@ static void ft260_remove(struct hid_device *hdev)
 		return;
 
 	if (dev->iface_type == FT260_IFACE_UART) {
-		// FIXME:
 		cancel_work_sync(&dev->wakeup_work);
 		tty_port_unregister_device(&dev->port, ft260_tty_driver,
 					   dev->index);
