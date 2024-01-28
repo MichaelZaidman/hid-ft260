@@ -1510,10 +1510,8 @@ static int ft260_uart_port_activate(struct tty_port *tport, struct tty_struct *t
 	/* Wake up the chip as early as possible to not miss incoming data */
 	ft260_uart_wakeup(port);
 
-	if (port->reschedule_work) {
-		mod_timer(&port->wakeup_timer, jiffies +
-			  msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS));
-	}
+	mod_timer(&port->wakeup_timer, jiffies +
+		  msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS));
 
 	return 0;
 }
