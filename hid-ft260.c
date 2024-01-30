@@ -90,7 +90,7 @@ enum {
 	FT260_I2C_REPORT_MAX		= 0xDE,
 	FT260_GPIO			= 0xB0,
 	FT260_UART_INTERRUPT_STATUS	= 0xB1,
-	FT260_UART_STATUS		= 0xE0,
+	FT260_UART_SETTINGS		= 0xE0,
 	FT260_UART_RI_DCD_STATUS	= 0xE1,
 	FT260_UART_REPORT_MIN		= 0xF0,
 	FT260_UART_REPORT_MAX		= 0xFE,
@@ -188,6 +188,18 @@ struct ft260_get_i2c_status_report {
 	u8 bus_status;		/* I2C bus status */
 	__le16 clock;		/* I2C bus clock in range 60-3400 KHz */
 	u8 reserved;
+} __packed;
+
+struct ft260_get_uart_settings_report {
+	u8 report;		/* FT260_UART_SETTINGS */
+	u8 flow_ctrl;		/* 0 - OFF; 1 - RTS_CTS, 2 - DTR_DSR, */
+				/* 3 - XON_XOFF, 4 - No flow control */
+	/* The baudrate field is unaligned */
+	__le32 baudrate;	/* little endian, 9600 = 0x2580, 19200 = 0x4B00 */
+	u8 data_bit;		/* 7 or 8 */
+	u8 parity;		/* 0: no parity, 1: odd, 2: even, 3: high, 4: low */
+	u8 stop_bit;		/* 0: one stop bit, 2: 2 stop bits */
+	u8 breaking;		/* 0: no break */
 } __packed;
 
 /* Feature Out reports */
@@ -1050,6 +1062,21 @@ static LIST_HEAD(ft260_uart_device_list);
 
 static void ft260_uart_wakeup(struct ft260_device *dev);
 
+static int ft260_get_uart_settings(struct hid_device *hdev,
+				   struct ft260_get_uart_settings_report *cfg)
+{
+	int ret;
+	int len = sizeof(struct ft260_get_uart_settings_report);
+
+	ret = ft260_hid_feature_report_get(hdev, FT260_UART_SETTINGS,
+					   (u8 *)cfg, len);
+	if (ret < 0) {
+		hid_err(hdev, "failed to retrieve uart settings\n");
+		return ret;
+	}
+	return 0;
+}
+
 static void ft260_uart_wakeup_workaraund_enable(struct ft260_device *port,
 						bool enable)
 {
@@ -1492,13 +1519,11 @@ static void ft260_uart_port_shutdown(struct tty_port *tport)
 
 static int ft260_uart_port_activate(struct tty_port *tport, struct tty_struct *tty)
 {
-	struct ft260_device *port =
-		container_of(tport, struct ft260_device, port);
+	int ret;
+	int baudrate;
+	struct ft260_get_uart_settings_report cfg;
+	struct ft260_device *port = container_of(tport, struct ft260_device, port);
 
-	/*
-	 * Set the TTY IO error marker - we will only clear this
-	 * once we have successfully opened the port.
-	 */
 	set_bit(TTY_IO_ERROR, &tty->flags);
 
 	spin_lock(&port->xmit_fifo_lock);
@@ -1507,8 +1532,21 @@ static int ft260_uart_port_activate(struct tty_port *tport, struct tty_struct *t
 
 	clear_bit(TTY_IO_ERROR, &tty->flags);
 
-	/* Wake up the chip as early as possible to not miss incoming data */
-	ft260_uart_wakeup(port);
+	/*
+	 * The port setting may remain intact after session termination.
+	 * Then, when reopening the port without configuring the port
+	 * setting, we need to retrieve the baud rate from the device to
+	 * reactivate the wakeup workaround if needed.
+	 */
+	ret = ft260_get_uart_settings(port->hdev, &cfg);
+	if (ret)
+		return ret;
+
+	baudrate = get_unaligned_le32(&cfg.baudrate);
+	if (baudrate > FT260_UART_EN_PW_SAVE_BAUD)
+		ft260_uart_wakeup_workaraund_enable(port, true);
+
+	ft260_dbg("configurd baudrate = %d", baudrate);
 
 	mod_timer(&port->wakeup_timer, jiffies +
 		  msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS));
