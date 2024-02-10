@@ -308,8 +308,7 @@ enum {
 #define FT260_UART_EN_PW_SAVE_BAUD	(4800)
 
 #define UART_COUNT_MAX (4) /* Number of supported UARTs */
-#define XMIT_FIFO_SIZE (256)
-#define TTY_WAKEUP_WATERMARK (XMIT_FIFO_SIZE / 2)
+#define XMIT_FIFO_SIZE (PAGE_SIZE)
 
 static const struct hid_device_id ft260_devices[] = {
 	{ HID_USB_DEVICE(USB_VENDOR_ID_FUTURE_TECHNOLOGY,
@@ -1211,17 +1210,13 @@ static int ft260_uart_transmit_chars(struct ft260_device *port)
 
 		len = kfifo_out_spinlocked(xmit, rep->data, len, &port->xmit_fifo_lock);
 
-		ret = ft260_hid_output_report(hdev, (u8 *)rep, len + sizeof(*rep));
+		ret = ft260_hid_output_report(hdev, (u8 *)rep, len + 2);
 		if (ret < 0)
 			goto tty_out;
 
 		data_len -= len;
 		port->icount.tx += len;
 	} while (data_len > 0);
-
-	len = kfifo_len(xmit);
-	if ((XMIT_FIFO_SIZE - len) > TTY_WAKEUP_WATERMARK)
-		tty_wakeup(tty);
 
 	ret = 0;
 
@@ -1546,7 +1541,7 @@ static int ft260_uart_port_activate(struct tty_port *tport, struct tty_struct *t
 	if (baudrate > FT260_UART_EN_PW_SAVE_BAUD)
 		ft260_uart_wakeup_workaraund_enable(port, true);
 
-	ft260_dbg("configurd baudrate = %d", baudrate);
+	ft260_dbg("configured baudrate = %d", baudrate);
 
 	mod_timer(&port->wakeup_timer, jiffies +
 		  msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS));
