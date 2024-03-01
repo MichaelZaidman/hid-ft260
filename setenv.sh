@@ -10,13 +10,13 @@
 #   . ./setenv.sh
 
 # Example with 2 ft260 devices:
-#   michael@m2:~/sw/hid-ft260$ . setenv.sh 
+#   michael@m2:~/sw/hid-ft260$ . setenv.sh
 #   sysfs_i2c_15
 #   sysfs_i2c_0
 
 #   michael@m2:~/sw/hid-ft260$ echo $sysfs_i2c_0
 #   /sys/bus/hid/drivers/ft260/0003:0403:6030.0007
-#   
+#
 #   michael@m2:~/sw/hid-ft260$ echo $sysfs_i2c_15
 #   /sys/bus/hid/drivers/ft260/0003:0403:6030.000C
 
