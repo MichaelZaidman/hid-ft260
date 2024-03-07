@@ -987,8 +987,8 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 	mutex_lock(&dev->lock);
 
 	if (!(dev->gpio_en & (1 << offset))) {
-		hid_err(hdev, "%s: wrong pin function %d\n", __func__, offset);
-		goto exit;
+		hid_err(hdev, "%s: GPIO %d may not be configured as a GPIO. Continuing anyway.\n", __func__, offset);
+		// goto exit;
 	}
 
 	rep = (struct ft260_gpio_write_request_report *)&dev->feature_buf;
@@ -1044,9 +1044,9 @@ static int ft260_gpio_direction_set(struct gpio_chip *gc, u32 offset,
 	mutex_lock(&dev->lock);
 
 	if (!(dev->gpio_en & (1 << offset))) {
-		hid_err(hdev, "%s: wrong pin function %d\n", __func__, offset);
-		ret = -EIO;
-		goto exit;
+		hid_err(hdev, "%s: GPIO %d may not be configured as a GPIO. Continuing anyway.\n", __func__, offset);
+		// ret = -EIO;
+		// goto exit;
 	}
 
 	buf = (u8 *)&dev->feature_buf;
