@@ -206,6 +206,22 @@ enum {
 	FT260_WAKEUP_INTERUP_ENABLE = 1,
 };
 
+/* Interrupt trigger conditions */
+enum {
+	FT260_INTR_COND_RISING_EDGE = 0,
+	FT260_INTR_COND_LEVEL_HIGH = 1,
+	FT260_INTR_COND_FALLING_EDGE = 2,
+	FT260_INTR_COND_LEVEL_LOW = 3,
+};
+
+/* Interupt level duration, when trigger cond is level high/low */
+enum {
+	FT260_INTR_COND_DELAY_1MS = 1,
+	FT260_INTR_COND_DELAY_5MS = 2,
+	FT260_INTR_COND_DELAY_30MS = 3,
+};
+
+
 enum {
 	FT260_INTERFACE_I2C = 0,
 	FT260_INTERFACE_UART = 1,
@@ -284,9 +300,19 @@ struct ft260_set_uart_mode_report {
 } __packed;
 
 struct ft260_set_enable_interrupt_report {
-	u8 report;		/* FT260_I2C_REPORT */
+	u8 report;		/* FT260_SYSTEM_SETTINGS */
 	u8 request;		/* Enable Interrupt/Wake up */
 	u8 enable_wakeup_int;		/* 0 GPIO/1 Wakeup/Interupt	*/
+} __packed;
+
+
+struct ft260_set_interrupt_trigger_cond_report {
+	u8 report;		/* FT260_SYSTEM_SETTINGS */
+	u8 request;		/* Set Interrupt Trigger Condition */
+	u16 intr_cond;		/* First byte = trigger condition */
+				/* 0 - rising e, 1 - lvl high, 2 - falling e, 3 - lvl low */
+				/* Second byte = duration for level high/low */
+				/* 1 - 1ms, 2 - 5ms, 3 - 30ms */
 } __packed;
 
 struct ft260_set_i2c_reset_report {
@@ -1170,6 +1196,7 @@ static int ft260_is_interface_enabled(struct hid_device *hdev,
 	ft260_dbg("gpioA_func: 0x%02x\n", cfg->gpioa_func);
 	ft260_dbg("gpioG_func: 0x%02x\n", cfg->gpiog_func);
 	ft260_dbg("wakeup_int: 0x%02x\n", cfg->enable_wakeup_int);
+	ft260_dbg("intr_cond: 0x%02x\n", cfg->intr_cond);
 
 	ret = interface;
 	return ret;
@@ -1364,6 +1391,11 @@ FT260_BYTE_ATTR_STORE(enable_wakeup_int, ft260_set_enable_interrupt_report,
 			  FT260_ENABLE_INTERRUPT, ft260_attr_enable_wakeup_int);
 static DEVICE_ATTR_RW(enable_wakeup_int);
 
+FT260_SSTAT_ATTR_SHOW(intr_cond);
+FT260_WORD_ATTR_STORE(intr_cond, ft260_set_interrupt_trigger_cond_report,
+			  FT260_SET_INTERRUPT_TRIGGER, ft260_attr_dummy_func);
+static DEVICE_ATTR_RW(intr_cond);
+
 FT260_SSTAT_ATTR_SHOW(power_saving_en);
 static DEVICE_ATTR_RO(power_saving_en);
 
@@ -1409,6 +1441,7 @@ static const struct attribute_group ft260_attr_group = {
 		  &dev_attr_power_saving_en.attr,
 		  &dev_attr_i2c_enable.attr,
 		  &dev_attr_enable_wakeup_int.attr,
+		  &dev_attr_intr_cond.attr,
 		  &dev_attr_gpio2_func.attr,
 		  &dev_attr_gpioa_func.attr,
 		  &dev_attr_gpiog_func.attr,
