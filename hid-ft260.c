@@ -1483,12 +1483,6 @@ static int ft260_i2c_probe(struct hid_device *hdev,
 		return -1;
 	}
 
-	ret = sysfs_create_group(&hdev->dev.kobj, &ft260_attr_group);
-	if (ret < 0) {
-		hid_err(hdev, "failed to create sysfs attrs\n");
-		goto err_i2c_free;
-	}
-
 	chip = gpiochip_find(hdev->phys, ft260_gpio_chip_match_name);
 	if (chip)
 		return 0;
@@ -1653,6 +1647,13 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	default:
 		goto err_hid_close;
 	}
+
+	ret = sysfs_create_group(&hdev->dev.kobj, &ft260_attr_group);
+	if (ret < 0) {
+		hid_err(hdev, "failed to create sysfs attrs\n");
+		goto err_hid_close;
+	}
+
 
 	return 0;
 
