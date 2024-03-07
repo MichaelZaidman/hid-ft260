@@ -1432,6 +1432,12 @@ static ssize_t i2c_reset_store(struct device *kdev,
 }
 static DEVICE_ATTR_WO(i2c_reset);
 
+static ssize_t hid_phys_show(struct device *dev, struct device_attribute *attr, char *buf) {
+    struct hid_device *hdev = to_hid_device(dev);
+    return scnprintf(buf, PAGE_SIZE, "%s\n", hdev->phys);
+}
+static DEVICE_ATTR_RO(hid_phys);
+
 static const struct attribute_group ft260_attr_group = {
 	.attrs = (struct attribute *[]) {
 		  &dev_attr_chip_mode.attr,
@@ -1449,6 +1455,7 @@ static const struct attribute_group ft260_attr_group = {
 		  &dev_attr_clock_ctl.attr,
 		  &dev_attr_i2c_reset.attr,
 		  &dev_attr_clock.attr,
+		  &dev_attr_hid_phys.attr,
 		  NULL
 	}
 };
