@@ -201,19 +201,21 @@ enum {
 	FT260_GPIO_UART_DCD_RI		= (FT260_GPIO_4 | FT260_GPIO_5),
 	FT260_GPIO_UART_RTS_CTS		= (FT260_GPIO_B | FT260_GPIO_E),
 	FT260_GPIO_UART_DTR_DSR		= (FT260_GPIO_F | FT260_GPIO_H),
-	FT260_GPIO_UART_MODE_0		= (FT260_GPIO_UART_RX_TX |
+	FT260_GPIO_UART_MODE_0_SET	= (FT260_GPIO_UART_RX_TX |
 					   FT260_GPIO_UART_DCD_RI |
 					   FT260_GPIO_UART_RTS_CTS |
 					   FT260_GPIO_UART_DTR_DSR),
-	FT260_GPIO_UART_MODE_1		= (FT260_GPIO_UART_DCD_RI |
+	FT260_GPIO_UART_MODE_1_SET	= (FT260_GPIO_UART_DTR_DSR),
+	FT260_GPIO_UART_MODE_2_SET	= (FT260_GPIO_UART_RTS_CTS),
+	FT260_GPIO_UART_MODE_3_SET	= (FT260_GPIO_UART_RTS_CTS |
 					   FT260_GPIO_UART_DTR_DSR),
-	FT260_GPIO_UART_MODE_2		= (FT260_GPIO_UART_DCD_RI |
+	FT260_GPIO_UART_MODE_4_SET	= (FT260_GPIO_UART_MODE_3_SET),
+	FT260_GPIO_UART_DEFAULT		= (FT260_GPIO_UART_MODE_0_SET),
+	FT260_GPIO_UART_MODE_1_CLR	= (FT260_GPIO_UART_RX_TX |
 					   FT260_GPIO_UART_RTS_CTS),
-	FT260_GPIO_UART_MODE_3		= (FT260_GPIO_UART_DCD_RI |
-					   FT260_GPIO_UART_RTS_CTS |
+	FT260_GPIO_UART_MODE_2_CLR	= (FT260_GPIO_UART_RX_TX |
 					   FT260_GPIO_UART_DTR_DSR),
-	FT260_GPIO_UART_MODE_4		= (FT260_GPIO_UART_MODE_3),
-	FT260_GPIO_UART_DEFAULT		= (FT260_GPIO_UART_MODE_0),
+	FT260_GPIO_UART_MODE_3_CLR	= (FT260_GPIO_UART_RX_TX),
 	FT260_GPIO_UART_MODES		= (5),
 };
 
@@ -301,6 +303,12 @@ struct ft260_set_uart_mode_report {
 				/* 3 - XON_XOFF, 4 - No flow control */
 } __packed;
 
+struct ft260_set_uart_dcd_ri_report {
+	u8 report;		/* FT260_SYSTEM_SETTINGS */
+	u8 request;		/* FT260_ENABLE_UART_DCD_RI */
+	u8 uart_dcd_ri;		/* Pins func: 0 - GPIO4,GPIO5, 1 - DCD,RI */
+} __packed;
+
 struct ft260_set_i2c_reset_report {
 	u8 report;		/* FT260_SYSTEM_SETTINGS */
 	u8 request;		/* FT260_SET_I2C_RESET */
@@ -385,32 +393,32 @@ struct ft260_configure_uart_request_report {
 
 /* UART interface configuration */
 enum {
-	FT260_CFG_FLOW_CTRL_OFF		= 0x00,
-	FT260_CFG_FLOW_CTRL_RTS_CTS	= 0x01,
-	FT260_CFG_FLOW_CTRL_DTR_DSR	= 0x02,
-	FT260_CFG_FLOW_CTRL_XON_XOFF	= 0x03,
-	FT260_CFG_FLOW_CTRL_NONE	= 0x04,
+	FT260_UART_CFG_FLOW_CTRL_OFF		= 0x00,
+	FT260_UART_CFG_FLOW_CTRL_RTS_CTS	= 0x01,
+	FT260_UART_CFG_FLOW_CTRL_DTR_DSR	= 0x02,
+	FT260_UART_CFG_FLOW_CTRL_XON_XOFF	= 0x03,
+	FT260_UART_CFG_FLOW_CTRL_NONE		= 0x04,
 
-	FT260_CFG_DATA_BITS_7		= 0x07,
-	FT260_CFG_DATA_BITS_8		= 0x08,
+	FT260_UART_CFG_DATA_BITS_7		= 0x07,
+	FT260_UART_CFG_DATA_BITS_8		= 0x08,
 
-	FT260_CFG_PAR_NO		= 0x00,
-	FT260_CFG_PAR_ODD		= 0x01,
-	FT260_CFG_PAR_EVEN		= 0x02,
-	FT260_CFG_PAR_HIGH		= 0x03,
-	FT260_CFG_PAR_LOW		= 0x04,
+	FT260_UART_CFG_PAR_NO			= 0x00,
+	FT260_UART_CFG_PAR_ODD			= 0x01,
+	FT260_UART_CFG_PAR_EVEN			= 0x02,
+	FT260_UART_CFG_PAR_HIGH			= 0x03,
+	FT260_UART_CFG_PAR_LOW			= 0x04,
 
-	FT260_CFG_STOP_ONE_BIT		= 0x00,
-	FT260_CFG_STOP_TWO_BIT		= 0x02,
+	FT260_UART_CFG_STOP_ONE_BIT		= 0x00,
+	FT260_UART_CFG_STOP_TWO_BIT		= 0x02,
 
-	FT260_CFG_BREAKING_NO		= 0x00,
-	FT260_CFG_BEAKING_YES		= 0x01,
+	FT260_UART_CFG_BREAKING_NO		= 0x00,
+	FT260_UART_CFG_BEAKING_YES		= 0x01,
 
-	FT260_CFG_BAUD_MIN		= 1200,
-	FT260_CFG_BAUD_MAX		= 12000000,
+	FT260_UART_CFG_BAUD_MIN			= 1200,
+	FT260_UART_CFG_BAUD_MAX			= 12000000,
 };
 
-#define FT260_UART_EN_PW_SAVE_BAUD	(4800)
+#define FT260_UART_EN_PW_SAVE_BAUD (4800)
 
 #define UART_COUNT_MAX (4) /* Number of supported UARTs */
 #define XMIT_FIFO_SIZE (PAGE_SIZE)
@@ -992,8 +1000,32 @@ static void ft260_gpio_en_update(struct hid_device *hdev, u8 req, u8 value)
 		bitmap = FT260_GPIO_I2C_DEFAULT;
 		break;
 	case FT260_SET_UART_MODE:
+		switch (value) {
+		case FT260_UART_CFG_FLOW_CTRL_OFF:
+			bitmap = (u16)FT260_GPIO_MASK;
+			break;
+		case FT260_UART_CFG_FLOW_CTRL_RTS_CTS:
+			bitmap = FT260_GPIO_UART_MODE_1_CLR;
+			break;
+		case FT260_UART_CFG_FLOW_CTRL_DTR_DSR:
+			bitmap = FT260_GPIO_UART_MODE_2_CLR;
+			break;
+		case FT260_UART_CFG_FLOW_CTRL_XON_XOFF:
+		case FT260_UART_CFG_FLOW_CTRL_NONE:
+			bitmap = FT260_GPIO_UART_MODE_3_CLR;
+			break;
+		default:
+			return;
+		}
+		ft260_gpio_en_clr(dev, bitmap);
 		bitmap = dev->gpio_uart_mode[value];
+		ft260_gpio_en_set(dev, bitmap);
+		goto exit;
+
+	case FT260_ENABLE_UART_DCD_RI:
+		bitmap = FT260_GPIO_UART_DCD_RI;
 		break;
+
 	case FT260_SELECT_GPIO2_FUNC:
 		bitmap = FT260_GPIO_2;
 		break;
@@ -1011,7 +1043,7 @@ static void ft260_gpio_en_update(struct hid_device *hdev, u8 req, u8 value)
 		ft260_gpio_en_set(dev, bitmap);
 	else
 		ft260_gpio_en_clr(dev, bitmap);
-
+exit:
 	hid_info(hdev, "enabled GPIOs: %04x\n", dev->gpio_en);
 }
 
@@ -1196,11 +1228,11 @@ static int ft260_gpio_init(struct ft260_device *dev,
 
 	hid_info(hdev, "initialize gpio chip\n");
 
-	dev->gpio_uart_mode[0] = (u16)FT260_GPIO_UART_MODE_0;
-	dev->gpio_uart_mode[1] = (u16)FT260_GPIO_UART_MODE_1;
-	dev->gpio_uart_mode[2] = (u16)FT260_GPIO_UART_MODE_2;
-	dev->gpio_uart_mode[3] = (u16)FT260_GPIO_UART_MODE_3;
-	dev->gpio_uart_mode[4] = (u16)FT260_GPIO_UART_MODE_4;
+	dev->gpio_uart_mode[0] = (u16)FT260_GPIO_UART_MODE_0_SET;
+	dev->gpio_uart_mode[1] = (u16)FT260_GPIO_UART_MODE_1_SET;
+	dev->gpio_uart_mode[2] = (u16)FT260_GPIO_UART_MODE_2_SET;
+	dev->gpio_uart_mode[3] = (u16)FT260_GPIO_UART_MODE_3_SET;
+	dev->gpio_uart_mode[4] = (u16)FT260_GPIO_UART_MODE_4_SET;
 
 	if (cfg->chip_mode) {
 		if (cfg->chip_mode & FT260_MODE_UART || cfg->chip_mode == FT260_MODE_ALL)
@@ -1444,6 +1476,10 @@ FT260_BYTE_ATTR_STORE(uart_mode, ft260_set_uart_mode_report,
 		      FT260_SET_UART_MODE, ft260_gpio_en_update);
 static DEVICE_ATTR_RW(uart_mode);
 
+FT260_BYTE_ATTR_STORE(uart_dcd_ri, ft260_set_uart_dcd_ri_report,
+		      FT260_ENABLE_UART_DCD_RI, ft260_gpio_en_update);
+static DEVICE_ATTR_WO(uart_dcd_ri);
+
 FT260_SSTAT_ATTR_SHOW(clock_ctl);
 FT260_BYTE_ATTR_STORE(clock_ctl, ft260_set_system_clock_report,
 		      FT260_SET_CLOCK, ft260_attr_dummy_func);
@@ -1479,6 +1515,7 @@ static const struct attribute_group ft260_attr_group = {
 		  &dev_attr_gpioa_func.attr,
 		  &dev_attr_gpiog_func.attr,
 		  &dev_attr_uart_mode.attr,
+		  &dev_attr_uart_dcd_ri.attr,
 		  &dev_attr_clock_ctl.attr,
 		  &dev_attr_i2c_reset.attr,
 		  &dev_attr_clock.attr,
@@ -1726,33 +1763,33 @@ static int ft260_uart_change_speed(struct ft260_device *port,
 
 	switch (termios->c_cflag & CSIZE) {
 	case CS7:
-		req.data_bit = FT260_CFG_DATA_BITS_7;
+		req.data_bit = FT260_UART_CFG_DATA_BITS_7;
 		break;
 	case CS5:
 	case CS6:
 		hid_err(hdev, "invalid data bit size, setting a default\n");
-		req.data_bit = FT260_CFG_DATA_BITS_8;
+		req.data_bit = FT260_UART_CFG_DATA_BITS_8;
 		termios->c_cflag &= ~CSIZE;
 		termios->c_cflag |= CS8;
 		break;
 	default:
 	case CS8:
-		req.data_bit = FT260_CFG_DATA_BITS_8;
+		req.data_bit = FT260_UART_CFG_DATA_BITS_8;
 		break;
 	}
 
 	req.stop_bit = (termios->c_cflag & CSTOPB) ?
-		FT260_CFG_STOP_TWO_BIT : FT260_CFG_STOP_ONE_BIT;
+		FT260_UART_CFG_STOP_TWO_BIT : FT260_UART_CFG_STOP_ONE_BIT;
 
 	if (termios->c_cflag & PARENB) {
 		req.parity = (termios->c_cflag & PARODD) ?
-			FT260_CFG_PAR_ODD : FT260_CFG_PAR_EVEN;
+			FT260_UART_CFG_PAR_ODD : FT260_UART_CFG_PAR_EVEN;
 	} else {
-		req.parity = FT260_CFG_PAR_NO;
+		req.parity = FT260_UART_CFG_PAR_NO;
 	}
 
 	baud = tty_termios_baud_rate(termios);
-	if (baud == 0 || baud < FT260_CFG_BAUD_MIN || baud > FT260_CFG_BAUD_MAX) {
+	if (baud == 0 || baud < FT260_UART_CFG_BAUD_MIN || baud > FT260_UART_CFG_BAUD_MAX) {
 		struct tty_struct *tty = tty_port_tty_get(&port->port);
 
 		hid_err(hdev, "invalid baud rate %d\n", baud);
@@ -1769,9 +1806,9 @@ static int ft260_uart_change_speed(struct ft260_device *port,
 	put_unaligned_le32(cpu_to_le32(baud), &req.baudrate);
 
 	if (termios->c_cflag & CRTSCTS)
-		req.flow_ctrl = FT260_CFG_FLOW_CTRL_RTS_CTS;
+		req.flow_ctrl = FT260_UART_CFG_FLOW_CTRL_RTS_CTS;
 	else
-		req.flow_ctrl = FT260_CFG_FLOW_CTRL_OFF;
+		req.flow_ctrl = FT260_UART_CFG_FLOW_CTRL_OFF;
 
 	ft260_dbg("configured termios: flow control: %d, baudrate: %d, ",
 		  req.flow_ctrl, baud);
@@ -1779,14 +1816,16 @@ static int ft260_uart_change_speed(struct ft260_device *port,
 		  req.data_bit, req.parity,
 		  req.stop_bit, req.breaking);
 
-	req.flow_ctrl = FT260_CFG_FLOW_CTRL_NONE;
-	req.breaking = FT260_CFG_BREAKING_NO;
+	req.flow_ctrl = FT260_UART_CFG_FLOW_CTRL_NONE;
+	req.breaking = FT260_UART_CFG_BREAKING_NO;
 
 	mutex_lock(&port->lock);
 
 	ret = ft260_hid_feature_report_set(hdev, (u8 *)&req, sizeof(req));
 	if (ret < 0)
 		hid_err(hdev, "failed to change termios: %d\n", ret);
+	else
+		ft260_gpio_en_update(hdev, FT260_SET_UART_MODE, req.flow_ctrl);
 
 	mutex_unlock(&port->lock);
 
@@ -2086,12 +2125,12 @@ static int ft260_uart_probe(struct ft260_device *dev,
 	/* Configure UART to 9600n8 */
 	req.report	= FT260_SYSTEM_SETTINGS;
 	req.request	= FT260_SET_UART_CONFIG;
-	req.flow_ctrl	= FT260_CFG_FLOW_CTRL_NONE;
+	req.flow_ctrl	= FT260_UART_CFG_FLOW_CTRL_NONE;
 	put_unaligned_le32(cpu_to_le32(9600), &req.baudrate);
-	req.data_bit	= FT260_CFG_DATA_BITS_8;
-	req.parity	= FT260_CFG_PAR_NO;
-	req.stop_bit	= FT260_CFG_STOP_ONE_BIT;
-	req.breaking	= FT260_CFG_BREAKING_NO;
+	req.data_bit	= FT260_UART_CFG_DATA_BITS_8;
+	req.parity	= FT260_UART_CFG_PAR_NO;
+	req.stop_bit	= FT260_UART_CFG_STOP_ONE_BIT;
+	req.breaking	= FT260_UART_CFG_BREAKING_NO;
 
 	ret = ft260_hid_feature_report_set(hdev, (u8 *)&req, sizeof(req));
 	if (ret < 0) {
