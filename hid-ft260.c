@@ -18,6 +18,8 @@
 #include <linux/kfifo.h>
 #include <linux/tty_flip.h>
 #include <linux/minmax.h>
+#include <linux/version.h>
+
 #include <asm/unaligned.h>
 
 #ifdef DEBUG
@@ -1127,8 +1129,11 @@ static void ft260_uart_port_put(struct ft260_device *port)
 
 static void ft260_uart_port_remove(struct ft260_device *port)
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,2,0)
 	timer_delete_sync(&port->wakeup_timer);
-
+#else
+	del_timer_sync(&port->wakeup_timer);
+#endif // LINUX_VERSION_CODE >= KERNEL_VERSION(6,2,0)
 	mutex_lock(&ft260_uart_list_lock);
 	list_del(&port->device_list);
 	mutex_unlock(&ft260_uart_list_lock);
