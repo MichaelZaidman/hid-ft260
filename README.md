@@ -10,25 +10,25 @@ for UART. Each interface is independent, and the kernel detects it
 as a separate USB hidraw device. In addition, the chip implements
 14 GPIOs via multifunctional pins.
 
-Current status:
-1. I2C support - is merged into the kernel 5.13 mainline. Multiple fixes and
-   performance improvements were merged into kernel 6.2 release.
+## Current status
+
+The **main branch** of this repository holds the most comprehensive version
+of the FT260 Linux kernel driver:
+
+1. I2C support - upstreamed into the kernel 5.13 mainline.
 2. UART support - two implementations ([1](https://patches.linaro.org/project/linux-serial/patch/20220928192421.11908-1-contact@christina-quast.de/))
    and ([2](https://lore.kernel.org/lkml/638c51a2.170a0220.3af16.18f8@mx.google.com/))
    of the initial UART support were around for some time, and now they are
-   unified in the [uart](https://github.com/MichaelZaidman/hid-ft260/tree/uart)
-   branch of this repo and submitted upstream via this
+   unified, fixed several issues and merged into the **main branch** of this repo.
+   It is submitted upstream via this
    [commit](https://patchwork.kernel.org/project/linux-input/patch/20240216-ft260_review5-v5-1-36db44673ac7@christina-quast.de/).
-   It adds a serial interface /dev/ttyFTx, which implements tty serial
-   driver ops, facilitating baudrate configuration, data transmission
-   and reception, and termios settings.
 3. GPIO support - developed in the [gpio](https://github.com/MichaelZaidman/hid-ft260/tree/gpio)
-   branch, is merged into main branch of this repo and submitted upstream via this
+   branch, reapplied on top of the latest UART support, and is merged into the **main branch** of this repo.
+   The earlier GPIO version (before UART support) was submitted upstream via this
    [commit](https://lore.kernel.org/lkml/20230211115752.26276-2-michael.zaidman@gmail.com/T/).
-   I am working now to reapply it on top of the latest UART support.
-4. I continue developing the driver in this repo, upstreaming the changes
-   once they are mature enough.
 
+
+### I2C Interface
 FTDI suggests using hidraw and libusb userspace libraries to operate the
 FT260 I2C host controller via hidraw Linux kernel driver. But this
 approach makes the standard Linux I2C tools useless, and it does not
@@ -53,7 +53,12 @@ following benefits:
     explicit contexts synchronization when such access is done via hidraw
     and libusb userspace libraries.
 
-Specs:
+### UART Interface
+This driver adds a serial interface /dev/ttyFTx, which implements tty serial
+driver ops, making it easier to configure the baud rate, transmit and receive data,
+and termios settings.
+
+### References
 1. [DS_FT260.pdf](https://ftdichip.com/wp-content/uploads/2020/07/DS_FT260.pdf)
 2. [AN_394_User_Guide_for_FT260.pdf](https://www.ftdichip.com/Support/Documents/AppNotes/AN_394_User_Guide_for_FT260.pdf)
 
