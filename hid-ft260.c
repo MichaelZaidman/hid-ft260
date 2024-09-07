@@ -56,6 +56,13 @@ MODULE_PARM_DESC(debug, "Toggle FT260 debugging messages");
  * read payload length to be 180 bytes.
  */
 #define FT260_RD_DATA_MAX (180)
+
+/* Time in ms to wait for a single report read data transfer completion */
+#define FT260_RD_ONE_REPORT_TO (25)
+
+/* Time in ms to wait for a multi-report read data transfer completion */
+#define FT260_RD_MULTI_REPORT_TO (FT260_RD_ONE_REPORT_TO * FT260_RD_DATA_MAX / 60)
+
 #define FT260_WR_I2C_DATA_MAX (60)
 #define FT260_WR_UART_DATA_MAX (62)
 #define FT260_GPIOCHIP "ft260_gpio"
@@ -711,7 +718,7 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 {
 	u16 rd_len;
 	u16 rd_data_max = 60;
-	int timeout, ret = 0;
+	int timeout, jiffies, ret = 0;
 	struct ft260_i2c_read_request_report rep;
 	struct hid_device *hdev = dev->hdev;
 	u8 bus_busy = 0;
@@ -722,9 +729,11 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 		flag = FT260_FLAG_START;
 	do {
 		if (len <= rd_data_max) {
+			timeout = FT260_RD_ONE_REPORT_TO;
 			rd_len = len;
 			flag |= FT260_FLAG_STOP;
 		} else {
+			timeout = FT260_RD_MULTI_REPORT_TO;
 			rd_len = rd_data_max;
 		}
 		rd_data_max = FT260_RD_DATA_MAX;
@@ -749,8 +758,8 @@ static int ft260_i2c_read(struct ft260_device *dev, u8 addr, u8 *data,
 			goto ft260_i2c_read_exit;
 		}
 
-		timeout = msecs_to_jiffies(5000);
-		if (!wait_for_completion_timeout(&dev->wait, timeout)) {
+		jiffies = msecs_to_jiffies(timeout);
+		if (!wait_for_completion_timeout(&dev->wait, jiffies)) {
 			ret = -ETIMEDOUT;
 			ft260_i2c_reset(hdev);
 			goto ft260_i2c_read_exit;
