@@ -1430,6 +1430,7 @@ static void ft260_attr_dummy_func(struct hid_device *hdev, u8 req, u16 value)
 				hid_err(hdev, "%s: failed!\n", __func__);      \
 			else						       \
 				func(hdev, req, name);			       \
+			ret = count;					       \
 			mutex_unlock(&dev->lock);			       \
 		} else {						       \
 			ret = -EINVAL;					       \
