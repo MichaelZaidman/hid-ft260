@@ -5,7 +5,7 @@
 ### FTDI FT260 Linux kernel driver
 
 The FTDI FT260 chip implements USB to I2C/UART bridges through two
-USB HID class interfaces. The first - is for I2C and the second
+USB HID class interfaces. The first is for I2C and the second
 for UART. Each interface is independent, and the kernel detects it
 as a separate USB hidraw device. In addition, the chip implements
 14 GPIOs via multifunctional pins.
@@ -19,7 +19,7 @@ of the FT260 Linux kernel driver:
 2. UART support - two implementations ([1](https://patches.linaro.org/project/linux-serial/patch/20220928192421.11908-1-contact@christina-quast.de/))
    and ([2](https://lore.kernel.org/lkml/638c51a2.170a0220.3af16.18f8@mx.google.com/))
    of the initial UART support were around for some time, and now they are
-   unified, fixed several issues and merged into the **main branch** of this repo.
+   unified, fixed several issues, and merged into the **main branch** of this repo.
    It is submitted upstream via this
    [commit](https://patchwork.kernel.org/project/linux-input/patch/20240216-ft260_review5-v5-1-36db44673ac7@christina-quast.de/).
 3. GPIO support - developed in the [gpio](https://github.com/MichaelZaidman/hid-ft260/tree/gpio)
@@ -80,7 +80,7 @@ which was added by [https://lkml.org/lkml/2021/12/13/526](https://lkml.org/lkml/
   if (!hid_is_usb(hdev))
 ```
 
-As workaround you can comment two lines in the ft260_probe routine:
+As a workaround, you can comment the below two lines in the ft260_probe routine:
 ```
         if (!hid_is_usb(hdev))
                 return -EINVAL;
@@ -111,7 +111,7 @@ $ echo $sysfs_i2c_15
 /sys/bus/hid/drivers/ft260/0003:0403:6030.000C
 ```
 
-Now we can see all availiable attributes:
+Now we can see all available attributes:
 ```
 $ ls $sysfs_i2c_0
 ```
@@ -122,10 +122,10 @@ Figure out the sysfs ft260 device node path, as explained earlier.
 To set the i2c clock to 400KHz on my system, I run this command:
 
 ```
-sudo bash -c 'echo 400 > $sysfs_i2c_0/clock'
+sudo bash -c "echo 400 > $sysfs_i2c_0/clock"
 ```
 
-### Set a multifunctional pin as GPIO
+### Set a multifunctional pin as a GPIO
 
 The FT260 has three pins that have more than two functions: DIO7 (pin 14),
 DIO0 (pin 7), and DIO12 (pin 27). The function of these pins can be configured
