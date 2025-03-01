@@ -563,7 +563,7 @@ static int ft260_xfer_status(struct ft260_device *dev, u8 bus_busy)
 	 * to 1, bit 1 is also set to 1.
 	 */
 	if (report.bus_status & FT260_I2C_STATUS_ERROR) {
-		hid_err(hdev, "i2c bus error: %#02x\n", report.bus_status);
+		ft260_dbg("i2c bus error: %#02x\n", report.bus_status);
 		return -EIO;
 	}
 
@@ -1718,24 +1718,24 @@ static int ft260_uart_receive_chars(struct ft260_device *port, u8 *data, u8 leng
 	return ret;
 }
 
-static int ft260_uart_write(struct tty_struct *tty, const u8 *buf, int cnt)
+static ssize_t ft260_uart_write(struct tty_struct *tty, const u8 *buf, size_t cnt)
 {
 	struct ft260_device *port = tty->driver_data;
-	int len, ret, diff;
+	ssize_t len, ret, diff;
 
 	len = kfifo_in_spinlocked(&port->xmit_fifo, buf, cnt, &port->xmit_fifo_lock);
-	ft260_dbg("count: %d, len: %d", cnt, len);
+	ft260_dbg("count: %zu, len: %zu", cnt, len);
 
 	ret = ft260_uart_transmit_chars(port);
 	if (ret < 0) {
-		ft260_dbg("failed to transmit %d\n", ret);
+		ft260_dbg("failed to transmit %zu\n", ret);
 		return 0;
 	}
 
 	ret = kfifo_len(&port->xmit_fifo);
 	if (ret > 0) {
 		diff = len - ret;
-		ft260_dbg("failed to send %d out of %d bytes\n", diff, len);
+		ft260_dbg("failed to send %zu out of %zu bytes\n", diff, len);
 		return diff;
 	}
 
