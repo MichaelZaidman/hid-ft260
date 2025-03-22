@@ -16,6 +16,7 @@
 #include <linux/serial.h>
 #include <linux/serial_core.h>
 #include <linux/kfifo.h>
+#include <linux/tty.h>
 #include <linux/tty_flip.h>
 #include <linux/minmax.h>
 #include <asm/unaligned.h>
@@ -182,7 +183,7 @@ enum {
 	FT260_GPIO_DIR_OUTPUT		= 0x01,
 };
 
-/* GPIO offsets */
+/* GPIO bit masks */
 enum {
 	FT260_GPIO_0			= (1 << 0),
 	FT260_GPIO_1			= (1 << 1),
@@ -215,7 +216,8 @@ enum {
 	FT260_GPIO_UART_MODE_1_SET	= (FT260_GPIO_UART_DTR_DSR),
 	FT260_GPIO_UART_MODE_2_SET	= (FT260_GPIO_UART_RTS_CTS),
 	FT260_GPIO_UART_MODE_3_SET	= (FT260_GPIO_UART_RTS_CTS |
-					   FT260_GPIO_UART_DTR_DSR),
+					   FT260_GPIO_UART_DTR_DSR |
+					   FT260_GPIO_UART_DCD_RI),
 	FT260_GPIO_UART_MODE_4_SET	= (FT260_GPIO_UART_MODE_3_SET),
 	FT260_GPIO_UART_DEFAULT		= (FT260_GPIO_UART_MODE_0_SET),
 	FT260_GPIO_UART_MODE_1_CLR	= (FT260_GPIO_UART_RX_TX |
@@ -224,6 +226,16 @@ enum {
 					   FT260_GPIO_UART_DTR_DSR),
 	FT260_GPIO_UART_MODE_3_CLR	= (FT260_GPIO_UART_RX_TX),
 	FT260_GPIO_UART_MODES		= (5),
+};
+
+/* UART modem control GPIO offsets */
+enum {
+	FT260_GPIO_UART_DCD		= (4),
+	FT260_GPIO_UART_RI		= (5),
+	FT260_GPIO_UART_RTS		= (7),
+	FT260_GPIO_UART_CTS		= (10),
+	FT260_GPIO_UART_DTR		= (11),
+	FT260_GPIO_UART_DCR		= (13),
 };
 
 #define FT260_SET_REQUEST_VALUE(report_id) ((FT260_FEATURE << 8) | (report_id))
@@ -440,6 +452,7 @@ MODULE_DEVICE_TABLE(hid, ft260_devices);
 struct ft260_device {
 	struct i2c_adapter adap;
 	struct hid_device *hdev;
+	int chip_mode;
 	int iface_type;
 	int iface_id;
 	struct list_head device_list;
@@ -1026,8 +1039,10 @@ static void ft260_gpio_en_update(struct hid_device *hdev, u8 req, u8 value)
 		default:
 			return;
 		}
+		hid_info(hdev, "enabled GPIOs: %04x, bitmap %04x\n", dev->gpio_en, bitmap);
 		ft260_gpio_en_clr(dev, bitmap);
 		bitmap = dev->gpio_uart_mode[value];
+		hid_info(hdev, "enabled GPIOs: %04x, bitmap %04x\n", dev->gpio_en, bitmap);
 		ft260_gpio_en_set(dev, bitmap);
 		goto exit;
 
@@ -1054,6 +1069,25 @@ static void ft260_gpio_en_update(struct hid_device *hdev, u8 req, u8 value)
 		ft260_gpio_en_clr(dev, bitmap);
 exit:
 	hid_info(hdev, "enabled GPIOs: %04x\n", dev->gpio_en);
+}
+
+static void ft260_gpio_output_cfg(struct ft260_gpio_state *gpio,
+				 u32 offset, int value)
+{
+	if (offset < FT260_GPIO_MAX) {
+		gpio->dirs |= 1 << offset;
+		if (value)
+			gpio->vals |= !!value << offset;
+		else
+			gpio->vals &= ~(1 << offset);
+	} else {
+		offset = offset - FT260_GPIO_MAX;
+		gpio->ex_dirs |= 1 << offset;
+		if (value)
+			gpio->ex_vals |= !!value << offset;
+		else
+			gpio->ex_vals &= ~(1 << offset);
+	}
 }
 
 static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
@@ -1093,7 +1127,7 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 			rep.gpio.ex_vals &= ~(1 << offset);
 	}
 
-	ft260_dbg("dirs %#02x vals %#02x ex_dir %#02x ex_vals %#02x\n",
+	ft260_dbg("dirs %#02x vals %#02x ex_dirs %#02x ex_vals %#02x\n",
 		  rep.gpio.dirs, rep.gpio.vals,
 		  rep.gpio.ex_dirs, rep.gpio.ex_vals);
 
@@ -1339,6 +1373,7 @@ static int ft260_get_interface_type(struct ft260_device *dev,
 	ft260_dbg("wakeup_int: 0x%02x\n", cfg->enable_wakeup_int);
 
 	dev->power_saving_en = cfg->power_saving_en;
+	dev->chip_mode = cfg->chip_mode;
 
 	switch (cfg->chip_mode) {
 	case FT260_MODE_ALL:
@@ -1356,7 +1391,6 @@ static int ft260_get_interface_type(struct ft260_device *dev,
 		break;
 	}
 
-	dev->iface_type = ret;
 	return ret;
 }
 
@@ -1862,6 +1896,75 @@ static void ft260_uart_set_termios(struct tty_struct *tty,
 	ft260_uart_change_speed(port, &tty->termios, NULL);
 }
 
+static int ft260_uart_tiocmget(struct tty_struct *tty)
+{
+	struct ft260_device *port = tty->driver_data;
+	int gpios;
+
+	/*
+	 * The modem lines control via ioctl is allowed only
+	 * when the related pins are in the gpio mode.
+	 */
+	int mask = FT260_GPIO_UART_MODE_4_SET;
+	if ((port->gpio_en & mask) != mask) {
+		ft260_dbg("Illigal gpio config %#02x != mask %#04x\n", port->gpio_en, mask);
+		return 0;
+	}
+
+	gpios = ft260_gpio_get_all(port->gc, FT260_GPIO_VALUE);
+
+	return (((gpios & FT260_GPIO_B) ? TIOCM_RTS : 0) |
+		((gpios & FT260_GPIO_E) ? TIOCM_CTS : 0) |
+		((gpios & FT260_GPIO_F) ? TIOCM_DTR : 0) |
+		((gpios & FT260_GPIO_H) ? TIOCM_DSR : 0) |
+		((gpios & FT260_GPIO_4) ? TIOCM_CAR : 0) |
+		((gpios & FT260_GPIO_5) ? TIOCM_RNG : 0));
+}
+
+static int ft260_uart_tiocmset(struct tty_struct *tty,
+		unsigned int set, unsigned int clear)
+{
+	int ret;
+	struct ft260_device *port = tty->driver_data;
+	struct ft260_gpio_write_request_report rep;
+	struct hid_device *hdev = port->hdev;
+
+	int mask = FT260_GPIO_UART_MODE_4_SET;
+	if ((port->gpio_en & mask) != mask) {
+		ft260_dbg("Illigal gpio config %#02x != mask %#04x\n", port->gpio_en, mask);
+		return 0;
+	}
+	rep.report = FT260_GPIO;
+	rep.gpio = port->gpio;
+
+	mutex_lock(&port->lock);
+
+	if (set & TIOCM_RTS)
+		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_RTS, 1);
+	if (set & TIOCM_DTR)
+		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_DTR, 1);
+	if (clear & TIOCM_RTS)
+		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_RTS, 0);
+	if (clear & TIOCM_DTR)
+		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_DTR, 0);
+
+	ft260_dbg("dirs %#02x vals %#02x ex_dirs %#02x ex_vals %#02x\n",
+		  rep.gpio.dirs, rep.gpio.vals,
+		  rep.gpio.ex_dirs, rep.gpio.ex_vals);
+
+	ret = ft260_hid_feature_report_set(hdev, (u8 *)&rep, sizeof(rep));
+	if (unlikely(ret < 0)) {
+		hid_err(hdev, "%s: cannot set GPIO: %d\n", __func__, ret);
+		mutex_unlock(&port->lock);
+		return -EIO;
+	}
+
+	port->gpio = rep.gpio;
+	mutex_unlock(&port->lock);
+
+	return 0;
+}
+
 static int ft260_uart_install(struct tty_driver *driver, struct tty_struct *tty)
 {
 	int idx = tty->index;
@@ -1938,6 +2041,8 @@ static const struct tty_operations ft260_uart_ops = {
 	.write_room		= ft260_uart_write_room,
 	.chars_in_buffer	= ft260_uart_chars_in_buffer,
 	.set_termios		= ft260_uart_set_termios,
+	.tiocmget		= ft260_uart_tiocmget,
+	.tiocmset		= ft260_uart_tiocmset,
 	.hangup			= ft260_uart_hangup,
 	.install		= ft260_uart_install,
 	.cleanup		= ft260_uart_cleanup,
@@ -2031,6 +2136,8 @@ static int ft260_uart_port_activate(struct tty_port *tport, struct tty_struct *t
 	mod_timer(&port->wakeup_timer, jiffies +
 		  msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS));
 
+	hid_info(port->hdev, "enabled GPIOs: %04x\n", port->gpio_en);
+
 	return 0;
 }
 
@@ -2084,15 +2191,19 @@ static int ft260_i2c_probe(struct ft260_device *dev,
 		return ret;
 	}
 
-	ret = ft260_gpio_init(dev, cfg);
-	if (ret)
-		goto err_i2c_free;
+	if (cfg->chip_mode == FT260_MODE_I2C) {
+		ret = ft260_gpio_init(dev, cfg);
+		if (ret)
+			goto err_i2c_free;
 
-	ret = sysfs_create_group(&hdev->dev.kobj, &ft260_attr_group);
-	if (ret < 0) {
-		hid_err(hdev, "failed to create sysfs attrs\n");
-		goto err_i2c_free;
+		ret = sysfs_create_group(&hdev->dev.kobj, &ft260_attr_group);
+		if (ret < 0) {
+			hid_err(hdev, "failed to create sysfs attrs\n");
+			goto err_i2c_free;
+		}
 	}
+
+	hid_info(hdev, "ft260_i2c_probe: enabled GPIOs: %04x\n", dev->gpio_en);
 
 	return 0;
 
@@ -2150,7 +2261,7 @@ static int ft260_uart_probe(struct ft260_device *dev,
 		goto err_hid_report;
 	}
 
-	if (dev->iface_id == 0) {
+	if (dev->chip_mode & FT260_MODE_UART || dev->chip_mode == FT260_MODE_ALL) {
 		ret = ft260_gpio_init(dev, cfg);
 		if (ret)
 			goto err_hid_report;
@@ -2161,6 +2272,8 @@ static int ft260_uart_probe(struct ft260_device *dev,
 			goto err_hid_report;
 		}
 	}
+
+	hid_info(hdev, "ft260_uart_probe: enabled GPIOs: %04x\n", dev->gpio_en);
 
 	return 0;
 
@@ -2224,11 +2337,11 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	mutex_init(&dev->lock);
 	init_completion(&dev->wait);
 
-	ret = ft260_get_interface_type(dev, &cfg);
-	if (ret <= FT260_IFACE_NONE)
+	dev->iface_type = ft260_get_interface_type(dev, &cfg);
+	if (dev->iface_type <= FT260_IFACE_NONE)
 		goto err_hid_close;
 
-	if (ret == FT260_IFACE_I2C)
+	if (dev->iface_type == FT260_IFACE_I2C)
 		ret = ft260_i2c_probe(dev, &cfg);
 	else
 		ret = ft260_uart_probe(dev, &cfg);
@@ -2260,11 +2373,12 @@ static void ft260_remove(struct hid_device *hdev)
 					   dev->index);
 		ft260_uart_port_remove(dev);
 		/* dev is still needed, so we will free it in _destroy func */
-		if (dev->iface_id == 0)
+		if (dev->chip_mode & FT260_MODE_UART || dev->chip_mode == FT260_MODE_ALL)
 			sysfs_remove_group(&hdev->dev.kobj, &ft260_attr_group);
 
 	} else {
-		sysfs_remove_group(&hdev->dev.kobj, &ft260_attr_group);
+		if (dev->chip_mode == FT260_MODE_I2C)
+			sysfs_remove_group(&hdev->dev.kobj, &ft260_attr_group);
 		i2c_del_adapter(&dev->adap);
 		kfree(dev);
 	}
