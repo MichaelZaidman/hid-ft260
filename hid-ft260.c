@@ -1937,10 +1937,10 @@ static int ft260_uart_tiocmget(struct tty_struct *tty)
 
 	gpios = ft260_gpio_get_all(port->gc, FT260_GPIO_VALUE);
 
-	return (((gpios & FT260_GPIO_B) ? TIOCM_RTS : 0) |
-		((gpios & FT260_GPIO_E) ? TIOCM_CTS : 0) |
-		((gpios & FT260_GPIO_F) ? TIOCM_DTR : 0) |
-		((gpios & FT260_GPIO_H) ? TIOCM_DSR : 0) |
+	return ((!(gpios & FT260_GPIO_B) ? TIOCM_RTS : 0) |
+		(!(gpios & FT260_GPIO_E) ? TIOCM_CTS : 0) |
+		(!(gpios & FT260_GPIO_F) ? TIOCM_DTR : 0) |
+		(!(gpios & FT260_GPIO_H) ? TIOCM_DSR : 0) |
 		((gpios & FT260_GPIO_4) ? TIOCM_CAR : 0) |
 		((gpios & FT260_GPIO_5) ? TIOCM_RNG : 0));
 }
@@ -1964,13 +1964,13 @@ static int ft260_uart_tiocmset(struct tty_struct *tty,
 	mutex_lock(&port->lock);
 
 	if (set & TIOCM_RTS)
-		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_RTS, 1);
-	if (set & TIOCM_DTR)
-		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_DTR, 1);
-	if (clear & TIOCM_RTS)
 		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_RTS, 0);
-	if (clear & TIOCM_DTR)
+	if (set & TIOCM_DTR)
 		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_DTR, 0);
+	if (clear & TIOCM_RTS)
+		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_RTS, 1);
+	if (clear & TIOCM_DTR)
+		ft260_gpio_output_cfg(&rep.gpio, FT260_GPIO_UART_DTR, 1);
 
 	ft260_dbg("dirs %#02x vals %#02x ex_dirs %#02x ex_vals %#02x\n",
 		  rep.gpio.dirs, rep.gpio.vals,
