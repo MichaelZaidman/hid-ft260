@@ -1039,10 +1039,8 @@ static void ft260_gpio_en_update(struct hid_device *hdev, u8 req, u8 value)
 		default:
 			return;
 		}
-		hid_info(hdev, "enabled GPIOs: %04x, bitmap %04x\n", dev->gpio_en, bitmap);
 		ft260_gpio_en_clr(dev, bitmap);
 		bitmap = dev->gpio_uart_mode[value];
-		hid_info(hdev, "enabled GPIOs: %04x, bitmap %04x\n", dev->gpio_en, bitmap);
 		ft260_gpio_en_set(dev, bitmap);
 		goto exit;
 
@@ -1068,7 +1066,7 @@ static void ft260_gpio_en_update(struct hid_device *hdev, u8 req, u8 value)
 	else
 		ft260_gpio_en_clr(dev, bitmap);
 exit:
-	hid_info(hdev, "enabled GPIOs: %04x\n", dev->gpio_en);
+	hid_info(hdev, "enabled GPIOs: %04x, bitmap %04x\n", dev->gpio_en, bitmap);
 }
 
 static void ft260_gpio_output_cfg(struct ft260_gpio_state *gpio,
@@ -1269,8 +1267,6 @@ static int ft260_gpio_init(struct ft260_device *dev,
 	struct hid_device *hdev = dev->hdev;
 	char prefix[] = "ft260_";
 
-	hid_info(hdev, "initialize gpio chip\n");
-
 	dev->gpio_uart_mode[0] = (u16)FT260_GPIO_UART_MODE_0_SET;
 	dev->gpio_uart_mode[1] = (u16)FT260_GPIO_UART_MODE_1_SET;
 	dev->gpio_uart_mode[2] = (u16)FT260_GPIO_UART_MODE_2_SET;
@@ -1309,7 +1305,6 @@ static int ft260_gpio_init(struct ft260_device *dev,
 		goto exit;
 	}
 	snprintf(label, label_sz, "%s%s", prefix, dev_name(&hdev->dev));
-	hid_info(hdev, "initialize gpio chip on %s\n", label);
 
 	dev->gc->label			= label;
 	dev->gc->direction_input	= ft260_gpio_direction_input;
@@ -2160,8 +2155,6 @@ static int ft260_uart_port_activate(struct tty_port *tport, struct tty_struct *t
 	mod_timer(&port->wakeup_timer, jiffies +
 		  msecs_to_jiffies(FT260_WAKEUP_NEEDED_AFTER_MS));
 
-	hid_info(port->hdev, "enabled GPIOs: %04x\n", port->gpio_en);
-
 	return 0;
 }
 
@@ -2236,8 +2229,6 @@ static int ft260_i2c_probe(struct ft260_device *dev,
 		}
 	}
 
-	hid_info(hdev, "ft260_i2c_probe: enabled GPIOs: %04x\n", dev->gpio_en);
-
 	return 0;
 
 err_i2c_free:
@@ -2307,8 +2298,6 @@ static int ft260_uart_probe(struct ft260_device *dev,
 			goto err_hid_report;
 		}
 	}
-
-	hid_info(hdev, "ft260_uart_probe: enabled GPIOs: %04x\n", dev->gpio_en);
 
 	return 0;
 
