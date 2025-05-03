@@ -22,10 +22,12 @@ of the FT260 Linux kernel driver:
    unified, fixed several issues, and merged into the **main branch** of this repo.
    It is submitted upstream via this
    [commit](https://patchwork.kernel.org/project/linux-input/patch/20240216-ft260_review5-v5-1-36db44673ac7@christina-quast.de/).
+   Since then, more functionalities have been added to this repository, such as flow control and modem control via ioctl support.
 3. GPIO support - developed in the [gpio](https://github.com/MichaelZaidman/hid-ft260/tree/gpio)
    branch, reapplied on top of the latest UART support, and is merged into the **main branch** of this repo.
    The earlier GPIO version (before UART support) was submitted upstream via this
    [commit](https://lore.kernel.org/lkml/20230211115752.26276-2-michael.zaidman@gmail.com/T/).
+   Since then, several issues have been fixed, and the code was improved and evolved in this repo.
 
 
 ### I2C Interface
@@ -92,7 +94,7 @@ The driver exposes multiple attributes to user space via sysfs.
 Since the order and number of the USB devices vary between systems,
 the sysfs path to the USB device may change even on the same system.
 
-You can figure out the sysfs path yourself or use the setenv script
+You can figure out the sysfs path yourself or use the `setenv` script
 to set the environment variable per USB interface of every FT260 device.
 
 ```
@@ -102,19 +104,24 @@ to set the environment variable per USB interface of every FT260 device.
 ```
 $ . setenv.sh
 sysfs_i2c_15
-sysfs_i2c_0
-
-$ echo $sysfs_i2c_0
-/sys/bus/hid/drivers/ft260/0003:0403:6030.0007
-
-$ echo $sysfs_i2c_15
-/sys/bus/hid/drivers/ft260/0003:0403:6030.000C
+sysfs_ttyFT1
+sysfs_i2c_14
+sysfs_ttyFT0
 ```
 
-Now we can see all available attributes:
+Now we can see all available attributes per device's interface:
 ```
-$ ls $sysfs_i2c_0
+$ ls $sysfs_i2c_14
+$ ls sysfs_ttyFT0
 ```
+
+### sysfs device attributes location
+The driver groups the device sysfs attributes per I2C or/and UART HID
+interfaces depending on the configured chip mode via the DCNF0 and DCNF1
+pins.
+
+The GPIO-related sysfs attributes are grouped under the UART interface
+in the 0, 2, and 3 chip modes and the I2C interface in chip mode 1.
 
 ### Change I2C bus clock
 
@@ -122,25 +129,26 @@ Figure out the sysfs ft260 device node path, as explained earlier.
 To set the i2c clock to 400KHz on my system, I run this command:
 
 ```
-sudo bash -c "echo 400 > $sysfs_i2c_0/clock"
+sudo bash -c "echo 400 > $sysfs_i2c_14/clock"
 ```
 
 ### Set a multifunctional pin as a GPIO
 
 The FT260 has three pins that have more than two functions: DIO7 (pin 14),
-DIO0 (pin 7), and DIO12 (pin 27). The function of these pins can be configured
-by eFUSE, EEPROM, or via the sysfs interface.
+DIO0 (pin 7), and DIO12 (pin 27). The function of these pins can be
+configured by eFUSE, EEPROM, or via the sysfs interface.
 
-For the sysfs method, you need to figure out the sysfs ft260 device node path,
-as explained earlier.
+For the sysfs method, you need to figure out the sysfs ft260 device node
+path, as explained earlier in **Configure ft260 device via sysfs** and
+**sysfs device attributes location** sections.
 
 In this example, I configure pin 14 to act as GPIO2:
 
 ```
-$ cat $sysfs_i2c_0/gpio2_func
+$ cat $sysfs_ttyFT0/gpio2_func
 1
-$ sudo bash -c "echo 0 > $sysfs_i2c_0/gpio2_func"
-$ cat $sysfs_i2c_0/gpio2_func
+$ sudo bash -c "echo 0 > $sysfs_ttyFT0/gpio2_func"
+$ cat $sysfs_ttyFT0/gpio2_func
 0
 $ sudo gpioget 0 2
 0
@@ -151,3 +159,11 @@ $ sudo gpioset 0 2=0
 $ sudo gpioget 0 2
 0
 ```
+
+### Modem pins control via ioctl (TIOCMBIS, TIOCMBIC, TIOCMGET and TIOCMSET)
+
+The driver supports modem pins control (TIOCM_RTS, TIOCM_DTR) via ioctl.
+
+Controlling the DTR and RTS UART signals through user-space applications
+via ioctl is helpful for programming embedded devices, such as the ESP32,
+using esptool as described here [27](https://github.com/MichaelZaidman/hid-ft260/issues/27).
