@@ -1089,16 +1089,24 @@ static void ft260_gpio_output_cfg(struct ft260_gpio_state *gpio,
 	}
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+static int ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
+#else
 static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
+#endif
 {
-	int ret;
+	int ret = 0;
 	struct ft260_gpio_write_request_report rep;
 	struct ft260_device *dev = gpiochip_get_data(gc);
 	struct hid_device *hdev = dev->hdev;
 
 	if (offset >= FT260_GPIO_TOTAL) {
 		hid_err(hdev, "%s: invalid offset %d\n", __func__, offset);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+		return -EINVAL;
+#else
 		return;
+#endif
 	}
 
 	ft260_dbg("offset %d val %d\n", offset, value);
@@ -1107,6 +1115,7 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 
 	if (!(dev->gpio_en & (1 << offset))) {
 		hid_err(hdev, "%s: wrong pin function %d\n", __func__, offset);
+		ret = -EINVAL;
 		goto exit;
 	}
 
@@ -1139,6 +1148,10 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 	dev->gpio = rep.gpio;
 exit:
 	mutex_unlock(&dev->lock);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 17, 0)
+	return ret;
+#endif
 }
 
 static int ft260_gpio_direction_set(struct gpio_chip *gc, u32 offset,
