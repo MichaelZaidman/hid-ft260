@@ -2322,6 +2322,138 @@ err_register_tty:
 	return ret;
 }
 
+/*
+ * FT260 errata TN_189 Section 2.1: The USB interrupt in/out endpoints are
+ * halted occasionally after enumeration. When this happens, the device
+ * returns STALL on the interrupt pipes and the standard Clear-Feature
+ * ENDPOINT_HALT request does not recover them. A full USB device reset
+ * followed by USB interface rebind is needed to bring the device back to
+ * normal operation. Check the endpoint status once after enumeration and
+ * trigger the recovery if halted.
+ */
+
+struct ft260_reset_work {
+	struct work_struct work;
+	struct usb_interface *usbif;
+};
+
+static void ft260_reset_and_rebind(struct work_struct *ws)
+{
+	struct ft260_reset_work *rw =
+		container_of(ws, struct ft260_reset_work, work);
+	struct usb_interface *usbif = rw->usbif;
+	struct usb_device *usbdev = interface_to_usbdev(usbif);
+	struct usb_host_config *actconfig;
+	int ret, i;
+
+	ret = usb_lock_device_for_reset(usbdev, NULL);
+	if (ret < 0) {
+		dev_err(&usbif->dev,
+			"failed to lock USB device for reset: %d\n", ret);
+		goto out;
+	}
+
+	ret = usb_reset_device(usbdev);
+	if (ret < 0) {
+		dev_err(&usbif->dev, "USB reset failed: %d\n", ret);
+		usb_unlock_device(usbdev);
+		goto out;
+	}
+
+	/*
+	 * usb_reset_device() keeps usbhid bound and doesn't re-trigger
+	 * HID-level driver probing. Unbind and rebind all USB interfaces
+	 * to force usbhid to destroy old HID devices and create new ones,
+	 * which will trigger fresh ft260_probe() calls.
+	 */
+	actconfig = usbdev->actconfig;
+	for (i = 0; actconfig && i < actconfig->desc.bNumInterfaces; i++) {
+		struct usb_interface *intf = actconfig->interface[i];
+
+		if (!intf || !intf->dev.driver)
+			continue;
+
+		device_release_driver(&intf->dev);
+	}
+
+	for (i = 0; actconfig && i < actconfig->desc.bNumInterfaces; i++) {
+		struct usb_interface *intf = actconfig->interface[i];
+
+		if (!intf)
+			continue;
+
+		ret = device_attach(&intf->dev);
+		if (ret < 0)
+			dev_err(&intf->dev,
+				"failed to rebind USB interface: %d\n", ret);
+	}
+
+	usb_unlock_device(usbdev);
+out:
+	usb_put_intf(usbif);
+	kfree(rw);
+}
+
+static int ft260_schedule_reset(struct usb_interface *usbif)
+{
+	struct ft260_reset_work *rw;
+
+	rw = kmalloc(sizeof(*rw), GFP_KERNEL);
+	if (!rw)
+		return -ENOMEM;
+
+	usb_get_intf(usbif);
+	rw->usbif = usbif;
+	INIT_WORK(&rw->work, ft260_reset_and_rebind);
+	schedule_work(&rw->work);
+
+	return 0;
+}
+
+static int ft260_check_intr_ep_health(struct hid_device *hdev)
+{
+	struct usb_interface *usbif = to_usb_interface(hdev->dev.parent);
+	struct usb_device *usbdev = interface_to_usbdev(usbif);
+	struct usb_host_interface *iface_desc = usbif->cur_altsetting;
+	__le16 *status;
+	int ret, i;
+
+	status = kmalloc(sizeof(*status), GFP_KERNEL);
+	if (!status)
+		return -ENOMEM;
+
+	for (i = 0; i < iface_desc->desc.bNumEndpoints; i++) {
+		u8 ep_addr = iface_desc->endpoint[i].desc.bEndpointAddress;
+
+		ret = usb_control_msg(usbdev,
+				      usb_rcvctrlpipe(usbdev, 0),
+				      USB_REQ_GET_STATUS,
+				      USB_DIR_IN | USB_RECIP_ENDPOINT,
+				      0, ep_addr,
+				      status, sizeof(*status),
+				      1000);
+		if (ret < 0) {
+			hid_err(hdev, "failed to get ep %#x status: %d\n",
+				ep_addr, ret);
+			goto out;
+		}
+
+		if (le16_to_cpu(*status) & 1) {
+			hid_warn(hdev,
+				 "ep %#x halted after enumeration (TN_189 errata), "
+				 "scheduling USB reset and rebind\n", ep_addr);
+			kfree(status);
+			ft260_schedule_reset(usbif);
+			return -ENODEV;
+		}
+	}
+
+	ret = 0;
+out:
+	kfree(status);
+	return ret;
+}
+
 static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 {
 	struct ft260_device *dev;
@@ -2360,6 +2492,10 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		hid_err(hdev, "failed to open HID HW\n");
 		goto err_hid_stop;
 	}
+
+	ret = ft260_check_intr_ep_health(hdev);
+	if (ret)
+		goto err_hid_close;
 
 	ret = ft260_hid_feature_report_get(hdev, FT260_CHIP_VERSION,
 					   (u8 *)&version, sizeof(version));
