@@ -2439,6 +2439,11 @@ static int ft260_raw_event(struct hid_device *hdev, struct hid_report *report,
 	struct ft260_device *dev = hid_get_drvdata(hdev);
 	struct ft260_input_report *xfer = (void *)data;
 
+	if (size < offsetof(struct ft260_input_report, data)) {
+		hid_err(hdev, "short report %d\n", size);
+		return -1;
+	}
+
 	if (xfer->length > size - offsetof(struct ft260_input_report, data)) {
 		hid_err(hdev, "report %#02x: length %d exceeds HID report size\n",
 			xfer->report, xfer->length);
