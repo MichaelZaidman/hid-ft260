@@ -2415,43 +2415,50 @@ static int ft260_check_intr_ep_health(struct hid_device *hdev)
 	struct usb_interface *usbif = to_usb_interface(hdev->dev.parent);
 	struct usb_device *usbdev = interface_to_usbdev(usbif);
 	struct usb_host_interface *iface_desc = usbif->cur_altsetting;
-	__le16 *status;
-	int ret, i;
-
-	status = kmalloc(sizeof(*status), GFP_KERNEL);
-	if (!status)
-		return -ENOMEM;
+	struct usb_endpoint_descriptor *ep = NULL;
+	unsigned int pipe;
+	u8 *buf;
+	int ret, actual_length, i;
 
 	for (i = 0; i < iface_desc->desc.bNumEndpoints; i++) {
-		u8 ep_addr = iface_desc->endpoint[i].desc.bEndpointAddress;
-
-		ret = usb_control_msg(usbdev,
-				      usb_rcvctrlpipe(usbdev, 0),
-				      USB_REQ_GET_STATUS,
-				      USB_DIR_IN | USB_RECIP_ENDPOINT,
-				      0, ep_addr,
-				      status, sizeof(*status),
-				      1000);
-		if (ret < 0) {
-			hid_err(hdev, "failed to get ep %#x status: %d\n",
-				ep_addr, ret);
-			goto out;
-		}
-
-		if (le16_to_cpu(*status) & 1) {
-			hid_warn(hdev,
-				 "ep %#x halted after enumeration (TN_189 errata), "
-				 "scheduling USB reset and rebind\n", ep_addr);
-			kfree(status);
-			ft260_schedule_reset(usbif);
-			return -ENODEV;
+		if (usb_endpoint_is_int_in(&iface_desc->endpoint[i].desc)) {
+			ep = &iface_desc->endpoint[i].desc;
+			break;
 		}
 	}
 
-	ret = 0;
-out:
-	kfree(status);
-	return ret;
+	if (!ep)
+		return 0;
+
+	buf = kmalloc(FT260_REPORT_MAX_LEN, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	/*
+	 * TN_189 errata: FT260 may STALL interrupt endpoints after
+	 * enumeration. GET_STATUS is unreliable (device reports 00 00
+	 * even when halted), so detect it by attempting an actual
+	 * interrupt IN transfer. The host controller will return -EPIPE
+	 * if it receives a STALL handshake from the device.
+	 *
+	 * Must be called before hid_hw_open() to avoid conflicting with
+	 * usbhid's interrupt IN URB.
+	 */
+	pipe = usb_rcvintpipe(usbdev, ep->bEndpointAddress);
+	ret = usb_interrupt_msg(usbdev, pipe, buf, FT260_REPORT_MAX_LEN,
+				&actual_length, 100);
+	kfree(buf);
+
+	if (ret == -EPIPE) {
+		hid_warn(hdev,
+			 "interrupt IN ep %#x halted (TN_189 errata), "
+			 "scheduling USB reset and rebind\n",
+			 ep->bEndpointAddress);
+		ft260_schedule_reset(usbif);
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
 static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
@@ -2487,15 +2494,15 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 		goto hid_fail;
 	}
 
+	ret = ft260_check_intr_ep_health(hdev);
+	if (ret)
+		goto err_hid_stop;
+
 	ret = hid_hw_open(hdev);
 	if (ret) {
 		hid_err(hdev, "failed to open HID HW\n");
 		goto err_hid_stop;
 	}
-
-	ret = ft260_check_intr_ep_health(hdev);
-	if (ret)
-		goto err_hid_close;
 
 	ret = ft260_hid_feature_report_get(hdev, FT260_CHIP_VERSION,
 					   (u8 *)&version, sizeof(version));
