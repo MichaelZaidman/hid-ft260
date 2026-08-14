@@ -2253,9 +2253,6 @@ static int ft260_i2c_probe(struct ft260_device *dev,
 	snprintf(dev->adap.name, sizeof(dev->adap.name),
 		 "FT260 usb-i2c bridge");
 
-	mutex_init(&dev->lock);
-	init_completion(&dev->wait);
-
 	ret = ft260_xfer_status(dev, FT260_I2C_STATUS_BUS_BUSY);
 	if (ret)
 		ft260_i2c_reset(hdev);
