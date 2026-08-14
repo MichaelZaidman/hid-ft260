@@ -1277,7 +1277,7 @@ static int ft260_gpio_init(struct ft260_device *dev,
 {
 	int ret;
 	int label_sz;
-	char * label;
+	char *label;
 	struct ft260_get_chip_version_report ver;
 	struct hid_device *hdev = dev->hdev;
 	char prefix[] = "ft260_";
