@@ -2623,6 +2623,9 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	}
 	hid_set_drvdata(hdev, dev);
 	dev->hdev = hdev;
+	mutex_init(&dev->lock);
+	spin_lock_init(&dev->read_lock);
+	init_completion(&dev->wait);
 
 	ret = hid_parse(hdev);
 	if (ret) {
@@ -2669,10 +2672,6 @@ static int ft260_probe(struct hid_device *hdev, const struct hid_device_id *id)
 	hid_info(hdev, "chip code: %02x%02x %02x%02x\n",
 		 version.chip_code[0], version.chip_code[1],
 		 version.chip_code[2], version.chip_code[3]);
-
-	mutex_init(&dev->lock);
-	spin_lock_init(&dev->read_lock);
-	init_completion(&dev->wait);
 
 	dev->iface_type = ft260_get_interface_type(dev, &cfg);
 	if (dev->iface_type <= FT260_IFACE_NONE)
