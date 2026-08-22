@@ -1355,6 +1355,7 @@ static int ft260_gpio_init(struct ft260_device *dev,
 	struct ft260_get_chip_version_report ver;
 	struct hid_device *hdev = dev->hdev;
 	char prefix[] = "ft260_";
+	u8 mode = cfg->chip_mode;
 
 	dev->gpio_uart_mode[0] = (u16)FT260_GPIO_UART_MODE_0_SET;
 	dev->gpio_uart_mode[1] = (u16)FT260_GPIO_UART_MODE_1_SET;
@@ -1362,15 +1363,16 @@ static int ft260_gpio_init(struct ft260_device *dev,
 	dev->gpio_uart_mode[3] = (u16)FT260_GPIO_UART_MODE_3_SET;
 	dev->gpio_uart_mode[4] = (u16)FT260_GPIO_UART_MODE_4_SET;
 
-	if (cfg->chip_mode) {
-		if (cfg->chip_mode & FT260_MODE_UART || cfg->chip_mode == FT260_MODE_ALL)
-			dev->gpio_en |= dev->gpio_uart_mode[cfg->uart_mode];
-		else
-			dev->gpio_en |= FT260_GPIO_UART_DEFAULT;
+	if (mode == FT260_MODE_ALL)
+		mode = FT260_MODE_BOTH;
 
-		if (!(cfg->chip_mode & FT260_MODE_I2C))
-			dev->gpio_en |= FT260_GPIO_I2C_DEFAULT;
-	}
+	if (mode & FT260_MODE_UART)
+		dev->gpio_en |= dev->gpio_uart_mode[cfg->uart_mode];
+	else
+		dev->gpio_en |= FT260_GPIO_UART_DEFAULT;
+
+	if (!(mode & FT260_MODE_I2C))
+		dev->gpio_en |= FT260_GPIO_I2C_DEFAULT;
 
 	if (cfg->gpio2_func == FT260_MFPIN_GPIO)
 		dev->gpio_en |= FT260_GPIO_2;
