@@ -2370,6 +2370,8 @@ static int ft260_uart_probe(struct ft260_device *dev,
 		goto err_hid_report;
 	}
 
+	cfg->uart_mode = FT260_UART_CFG_FLOW_CTRL_NONE;
+
 	if (dev->chip_mode & FT260_MODE_UART ||
 	    dev->chip_mode == FT260_MODE_ALL || dev->chip_mode == FT260_MODE_BOTH) {
 		ret = ft260_gpio_init(dev, cfg);
