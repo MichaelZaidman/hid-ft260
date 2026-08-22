@@ -240,7 +240,7 @@ enum {
 	FT260_GPIO_UART_RTS		= (7),
 	FT260_GPIO_UART_CTS		= (10),
 	FT260_GPIO_UART_DTR		= (11),
-	FT260_GPIO_UART_DCR		= (13),
+	FT260_GPIO_UART_DSR		= (13),
 };
 
 #define FT260_SET_REQUEST_VALUE(report_id) ((FT260_FEATURE << 8) | (report_id))
