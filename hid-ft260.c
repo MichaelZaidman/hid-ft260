@@ -1220,6 +1220,7 @@ static void ft260_gpio_set(struct gpio_chip *gc, u32 offset, int value)
 	}
 
 	dev->gpio = rep.gpio;
+	ret = 0;
 exit:
 	mutex_unlock(&dev->lock);
 
