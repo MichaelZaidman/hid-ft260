@@ -1684,7 +1684,6 @@ static const struct attribute_group ft260_i2c_chip_mode_1_attr_group = {
 static const struct attribute_group ft260_i2c_chip_mode_0_3_attr_group = {
 	.attrs = (struct attribute *[]) {
 		  &dev_attr_hid_over_i2c_en.attr,
-		  &dev_attr_i2c_enable.attr,
 		  &dev_attr_i2c_reset.attr,
 		  &dev_attr_clock.attr,
 		  NULL
@@ -1697,6 +1696,7 @@ static const struct attribute_group ft260_uart_chip_mode_0_2_3_attr_group = {
 		  &dev_attr_pwren_status.attr,
 		  &dev_attr_suspend_status.attr,
 		  &dev_attr_power_saving_en.attr,
+		  &dev_attr_i2c_enable.attr,
 		  &dev_attr_gpio2_func.attr,
 		  &dev_attr_gpioa_func.attr,
 		  &dev_attr_gpiog_func.attr,
