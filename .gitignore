@@ -1,0 +1,11 @@
+000*
+*.o
+*.cmd
+*.patch
+*.txt
+*.ko
+*.mod*
+*.symvers
+*.order
+.venv/
+__pycache__/
