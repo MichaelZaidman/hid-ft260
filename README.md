@@ -6,9 +6,9 @@
 
 The FTDI FT260 chip implements USB to I2C/UART bridges through two
 USB HID class interfaces. The first is for I2C and the second
-for UART. Each interface is independent, and the kernel detects it
-as a separate USB hidraw device. In addition, the chip implements
-14 GPIOs via multifunctional pins.
+for UART. Each interface is a separate USB HID device. With this
+driver bound, the kernel creates no hidraw node for them. In addition,
+the chip implements 14 GPIOs via multifunctional pins.
 
 ## Current status
 
@@ -29,6 +29,11 @@ of the FT260 Linux kernel driver:
    The earlier GPIO version (before UART support) was submitted upstream via this
    [commit](https://lore.kernel.org/lkml/20230211115752.26276-2-michael.zaidman@gmail.com/T/).
    Since then, several issues have been fixed, and the code was improved and evolved in this repo.
+4. Upstream series - in August 2026, the UART and GPIO support and the
+   I2C fixes from this repo were posted upstream as one series,
+   [HID: ft260: add UART and GPIO support, plus I2C fixes](https://lore.kernel.org/all/20260822213941.98882-1-michael.zaidman@gmail.com/T/#t).
+   It replaces the earlier UART and GPIO submissions above. A v2 of the
+   series, tested with the suite in `tests/`, is in preparation.
 
 ### I2C Interface
 FTDI suggests using hidraw and libusb userspace libraries to operate the
@@ -42,15 +47,15 @@ kernel i2c-core code as a regular I2C bus adapter, like when the I2C
 controller is a part of the MCU or CPU vendor chipset. It provides the
 following benefits:
 
-1.	It enables usage of the standard Linux userspace I2C tools like
+1.  It enables usage of the standard Linux userspace I2C tools like
     [i2c-tools](https://i2c.wiki.kernel.org/index.php/I2C_Tools) and a wide
     range of userspace applications relying on the `/dev/i2c-x` kernel API.
-2.	The driver exposes the FT260 I2C controller device via `/sys/bus/i2c`
-	bus to other I2C devices relying on it. It allows the sysfs I2C tree
+2.  The driver exposes the FT260 I2C controller device via `/sys/bus/i2c`
+    bus to other I2C devices relying on it. It allows the sysfs I2C tree
     instantiation, essential for complex I2C topologies, built with I2C
     multiplexers and/or I2C switches.
-3.	It guarantees atomic access at the kernel level to the I2C devices,
-	residing on the I2C controller's bus, implicitly enabling concurrent
+3.  It guarantees atomic access at the kernel level to the I2C devices,
+    residing on the I2C controller's bus, implicitly enabling concurrent
     access to the I2C bus from multiple userspace processes instead of
     explicit context synchronization when such access is done via hidraw
     and libusb userspace libraries.
@@ -67,23 +72,24 @@ and termios settings.
 ## HOWTO
 
 ### Getting started
-```
+```sh
 git clone https://github.com/MichaelZaidman/hid-ft260.git
 cd hid-ft260
 make
 sudo insmod hid-ft260.ko
 ```
 
-If you get the following error, your kernel does not support `hid_is_usb`,
-which was introduced in this [commit](https://lkml.org/lkml/2021/12/13/526).
-```
+Kernels before 5.16 do not have `hid_is_usb`, which was introduced in this
+[commit](https://lkml.org/lkml/2021/12/13/526). On such a kernel the build
+fails with this error:
+```console
 .../hid-ft260.c: In function ‘ft260_probe’:
-.../hid-ft260.c:928:7: error: implicit declaration of function ‘hid_is_usb’ [-Werror=implicit-function-declaration]
+.../hid-ft260.c: error: implicit declaration of function ‘hid_is_usb’ [-Werror=implicit-function-declaration]
   if (!hid_is_usb(hdev))
 ```
 
 As a workaround, you can comment out the following two lines in the ft260_probe routine:
-```
+```c
         if (!hid_is_usb(hdev))
                 return -EINVAL;
 ```
@@ -97,11 +103,11 @@ the sysfs path to the USB device may change even on the same system.
 You can figure out the sysfs path yourself or use the `setenv` script
 to set the environment variable per USB interface of every FT260 device.
 
-```
+```sh
 . ./setenv.sh
 ```
-#### Example with 2 ft260 devices:
-```
+#### Example with 2 ft260 devices
+```console
 $ . setenv.sh
 sysfs_i2c_15
 sysfs_ttyFT1
@@ -109,11 +115,8 @@ sysfs_i2c_14
 sysfs_ttyFT0
 ```
 
-Now we can see all available attributes per device's interface:
-```
-$ ls $sysfs_i2c_14
-$ ls $sysfs_ttyFT0
-```
+Now `ls $sysfs_i2c_14` and `ls $sysfs_ttyFT0` list the attributes of each
+interface.
 
 ### sysfs device attributes location
 The driver groups the device sysfs attributes per I2C and/or UART HID
@@ -126,9 +129,10 @@ in the 0, 2, and 3 chip modes and the I2C interface in chip mode 1.
 ### Change I2C bus clock
 
 Figure out the sysfs ft260 device node path, as explained earlier.
-To set the i2c clock to 400KHz, run this command:
+The clock is set in kHz, in the range 60 to 3400. The driver rejects a
+value outside that range. To set the i2c clock to 400 kHz, run this command:
 
-```
+```sh
 sudo bash -c "echo 400 > $sysfs_i2c_14/clock"
 ```
 
@@ -136,20 +140,20 @@ sudo bash -c "echo 400 > $sysfs_i2c_14/clock"
 
 To enable verbose debug output from the driver at load time:
 
-```
+```sh
 sudo insmod hid-ft260.ko debug=1
 ```
 
 Or at runtime:
 
-```
+```sh
 echo 1 | sudo tee /sys/module/hid_ft260/parameters/debug
 ```
 
 The debug messages are written to the kernel log and can be viewed with `dmesg`.
 To disable debug logging:
 
-```
+```sh
 echo 0 | sudo tee /sys/module/hid_ft260/parameters/debug
 ```
 
@@ -163,9 +167,10 @@ For the sysfs method, you need to figure out the sysfs ft260 device node
 path, as explained earlier in **Configure ft260 device via sysfs** and
 **sysfs device attributes location** sections.
 
-In this example, I configure pin 14 to act as GPIO2:
+In this example, I configure pin 14 to act as GPIO2. The `gpioget` and
+`gpioset` commands are from libgpiod v1:
 
-```
+```console
 $ cat $sysfs_ttyFT0/gpio2_func
 1
 $ sudo bash -c "echo 0 > $sysfs_ttyFT0/gpio2_func"
@@ -183,8 +188,30 @@ $ sudo gpioget 0 2
 
 ### Modem pins control via ioctl (TIOCMBIS, TIOCMBIC, TIOCMGET and TIOCMSET)
 
-The driver supports modem pins control (TIOCM_RTS, TIOCM_DTR) via ioctl.
+TIOCMGET reports RTS, CTS, DTR, DSR, DCD (TIOCM_CAR) and RI (TIOCM_RNG).
+TIOCMSET, TIOCMBIS and TIOCMBIC change RTS and DTR only.
 
 Controlling the DTR and RTS UART signals through user-space applications
 via ioctl is helpful for programming embedded devices, such as the ESP32,
 using esptool as described in [issue #27](https://github.com/MichaelZaidman/hid-ft260/issues/27).
+
+### Run the test suite
+
+The tests in `tests/` drive real FT260 hardware. They need root, pytest,
+pyserial and i2c-tools; without `i2ctransfer` the I2C tests skip:
+```sh
+cd tests
+python3 -m venv .venv
+.venv/bin/pip install pytest pyserial
+sudo .venv/bin/pytest -v
+```
+
+They load `../hid-ft260.ko`; use `--ko=PATH` to test another build, for
+example the in-tree module. A test skips when its hardware is missing: an
+i2c device on the FT260 bus (a 24LC512 at 0x51 for the write tests), a
+second UART wired to the FT260 (`--peer`, default /dev/ttyUSB0), a chip
+strapped to another chip mode, a UART pattern file (`--pattern`), or the
+i2cperf tool (`--i2cperf`). `pytest --help` lists all options.
+
+The tests were written for the author's bench, two FT260 boards and an
+FT2232 wired to one of them. That setup is not documented here.
