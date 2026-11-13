@@ -215,3 +215,8 @@ i2cperf tool (`--i2cperf`). `pytest --help` lists all options.
 
 The tests were written for the author's bench, two FT260 boards and an
 FT2232 wired to one of them. That setup is not documented here.
+
+`tn189_reset_loop.py` is not part of the pytest run. It tests the TN_189
+workaround and needs a HW setup that holds the FT260 RESETN pin low on
+command. `tn189_reset/tn189_reset.ino` is the sketch for that setup and
+describes its serial commands.
