@@ -6,8 +6,10 @@ Run as root, with the module built in the parent directory:
     sudo .venv/bin/pytest -v
 """
 
+import hashlib
 import os
 import shutil
+import time
 
 import pytest
 
@@ -37,6 +39,32 @@ def pytest_addoption(parser):
 			 help="i2c address to read, default: probe 0x51 then 0x50")
 	parser.addoption("--i2cperf", default=DEFAULT_I2CPERF,
 			 help=f"throughput tool, default {DEFAULT_I2CPERF}")
+
+
+def pytest_report_header(config):
+	"""Name the module build and the kernel at the top of every run.
+
+	srcversion is a hash of the source only, so two builds of one tree
+	share it. The sha256 of the file tells them apart.
+	"""
+	ko = os.path.abspath(config.getoption("--ko"))
+	lines = []
+	if os.path.isfile(ko):
+		with open(ko, "rb") as f:
+			digest = hashlib.sha256(f.read()).hexdigest()
+		st = os.stat(ko)
+		mtime = time.strftime("%Y-%m-%d %H:%M:%S %z",
+				      time.localtime(st.st_mtime))
+		lines.append(f"module: {ko}, sha256: {digest}, "
+			     f"size: {st.st_size}, mtime: {mtime}")
+		lines.append(f"module srcversion: {ftlib.modinfo(ko, 'srcversion')}, "
+			     f"vermagic: {ftlib.modinfo(ko, 'vermagic')}")
+	else:
+		lines.append(f"module: {ko} not found")
+	with open("/proc/cmdline") as f:
+		cmdline = f.read().strip()
+	lines.append(f"kernel: {os.uname().release}, cmdline: {cmdline}")
+	return lines
 
 
 class Chip:
@@ -105,6 +133,12 @@ def chips(ko):
 			ftlib.unexport_all(base)
 		ftlib.rmmod()
 	ftlib.insmod(ko)
+
+	want = ftlib.modinfo(ko, "srcversion")
+	got = ftlib.loaded_srcversion()
+	if got != want:
+		pytest.exit(f"loaded hid_ft260 has srcversion {got}, "
+			    f"{ko} has {want}", returncode=1)
 
 	found = [Chip(usb) for usb in ftlib.find_devices()]
 	if not found:

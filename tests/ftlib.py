@@ -397,6 +397,17 @@ def rmmod():
 	subprocess.run(["rmmod", "hid-ft260"], check=True)
 
 
+def modinfo(ko, field):
+	"""One field of a module file, empty if the file has none."""
+	return subprocess.run(["modinfo", "-F", field, ko], capture_output=True,
+			      text=True, check=True).stdout.strip()
+
+
+def loaded_srcversion():
+	with open("/sys/module/hid_ft260/srcversion") as f:
+		return f.read().strip()
+
+
 def reload(ko):
 	"""Unload and load the module, return the log of the new probe."""
 	marker = mark("reload")
