@@ -32,8 +32,13 @@ of the FT260 Linux kernel driver:
 4. Upstream series - in August 2026, the UART and GPIO support and the
    I2C fixes from this repo were posted upstream as one series,
    [HID: ft260: add UART and GPIO support, plus I2C fixes](https://lore.kernel.org/all/20260822213941.98882-1-michael.zaidman@gmail.com/T/#t).
-   It replaces the earlier UART and GPIO submissions above. A v2 of the
-   series, tested with the suite in `tests/`, is in preparation.
+   It replaces the earlier UART and GPIO submissions above. Later
+   versions:
+   - [v2](https://lore.kernel.org/all/20261030223637.86907-1-michael.zaidman@gmail.com/T/#t), Oct 2026
+   - [v3](https://lore.kernel.org/all/20261114230800.1344401-1-michael.zaidman@gmail.com/T/#t), Nov 2026
+   - [v4](https://lore.kernel.org/all/20261117200423.19561-1-michael.zaidman@gmail.com/T/#t), Nov 2026
+
+   Note: v2, v3 and v4 were tested with the suite in `tests/`.
 
 ### I2C Interface
 FTDI suggests using hidraw and libusb userspace libraries to operate the
