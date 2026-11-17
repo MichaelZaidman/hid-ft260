@@ -1,20 +1,30 @@
 # SPDX-License-Identifier: MIT
 """Modem line control over the FT260 UART, through TIOCMGET and TIOCMSET.
 
-Both handlers refuse unless gpio_en covers FT260_GPIO_UART_MODE_4_SET,
-because the pins must be muxed as GPIO. tiocmget inverts RTS, CTS, DTR
-and DSR, and leaves DCD and RI as read. tiocmset acts on RTS and DTR
-only, writing 0 to assert.
+A pin that gpio_en gives to the gpiochip is read and written through
+the GPIO report. tiocmget inverts RTS, CTS, DTR and DSR, and leaves DCD
+and RI as read. tiocmset acts on RTS and DTR only, writing 0 to assert.
 
-RTS and CTS are cabled between the board and the peer, so asserting one
-side's RTS must show on the other side's CTS. The driver's inversion and
-the cable's active-low sense cancel, so the two booleans match. DTR and
-DSR are not cabled here, so they are only checked for not failing.
+A pin in UART function is not read. tiocmget reports CTS, DSR and DCD
+active and RI not active, as the get_mctrl() comment in serial_core.h
+asks. It reports RTS or DTR under flow control active, because the
+chip holds it active while it can take data. tiocmset ignores RTS while
+RTS/CTS flow control owns it, and DTR while DTR/DSR flow control owns
+it.
+
+RTS and CTS are cabled both ways between the board and the peer. Board
+DTR goes to peer DSR, and peer DTR goes to board DSR through 1 kOhm. So
+asserting one side's output must show on the other side's input. The
+driver's inversion and the cable's active-low sense cancel, so the two
+booleans match. DCD and RI are not cabled.
 """
 
 import contextlib
-import errno
+import fcntl
 import os
+import struct
+import termios
+import types
 
 import pytest
 import serial
@@ -24,10 +34,27 @@ import ftlib
 WANT = 0x2CB0			# FT260_GPIO_UART_MODE_4_SET
 DCD_RI = 0x0030			# FT260_GPIO_UART_DCD_RI
 BAUD = 9600
+DATA = b"0123456789abcdef"
+DTR_DSR = 2			# FT260_UART_CFG_FLOW_CTRL_DTR_DSR
 
 DCD = 4				# FT260_GPIO_4, read as TIOCM_CAR
 RI = 5				# FT260_GPIO_5, read as TIOCM_RNG
-DSR = 13			# FT260_GPIO_H, read as TIOCM_DSR
+
+# Flow control -> owned pair, free pair, gpio_en bits of the owned pair.
+# The board output of a pair goes to the peer input of the same name,
+# and the peer output to the board input.
+FLOW = {
+	"rtscts": (("rts", "cts"), ("dtr", "dsr"), 0x0480),
+	"dtrdsr": (("dtr", "dsr"), ("rts", "cts"), 0x2800),
+}
+TIOCM = {"rts": termios.TIOCM_RTS, "cts": termios.TIOCM_CTS,
+	 "dtr": termios.TIOCM_DTR, "dsr": termios.TIOCM_DSR}
+
+
+def tiocmget(port):
+	"""Modem bits from the driver. pyserial's rts and dtr are a cache."""
+	buf = fcntl.ioctl(port.fd, termios.TIOCMGET, struct.pack("I", 0))
+	return struct.unpack("I", buf)[0]
 
 
 @contextlib.contextmanager
@@ -55,6 +82,39 @@ def pair(chip, peer_link):
 		yield ft, other
 
 
+@pytest.fixture(params=sorted(FLOW))
+def flow(request, chip, peer_link):
+	"""Both ends open, the board with one hardware flow control mode.
+
+	CRTSCTS selects RTS/CTS. DTR/DSR has no termios flag, so it is
+	written to uart_mode with the port open. Opening the port calls
+	ft260_uart_change_speed(), which puts the termios mode back.
+	"""
+	owned, free, bits = FLOW[request.param]
+	rtscts = request.param == "rtscts"
+	marker = ftlib.mark(f"flow-{request.param}")
+	with serial.Serial(peer_link, BAUD, timeout=2) as other, \
+	     serial.Serial(chip.tty, BAUD, rtscts=rtscts, timeout=2) as ft:
+		before = None
+		if not rtscts:
+			before = ftlib.read_attr(chip.uart, "uart_mode")
+			ftlib.write_attr(chip.uart, "uart_mode", DTR_DSR)
+		try:
+			mask = ftlib.mask_of(os.path.basename(chip.uart), marker)
+			assert mask is not None, "the driver logged no mask"
+			mask = int(mask, 16)
+			assert mask & bits == 0
+			assert mask & (WANT & ~bits) == WANT & ~bits
+
+			yield types.SimpleNamespace(
+				ft=ft, other=other, out=owned[0], inp=owned[1],
+				free_out=free[0], free_in=free[1],
+				owned=TIOCM[owned[0]] | TIOCM[owned[1]])
+		finally:
+			if before is not None:
+				ftlib.write_attr(chip.uart, "uart_mode", before)
+
+
 @pytest.mark.parametrize("line", ["cts", "dsr", "cd", "ri"])
 def test_get_reads_every_input_line(pair, line):
 	ft, _ = pair
@@ -75,10 +135,18 @@ def test_peer_rts_reaches_the_chip_cts(pair, state):
 	assert ft.cts is state
 
 
-def test_dtr_toggles_without_error(pair):
-	ft, _ = pair
-	for state in (True, False):
-		ft.dtr = state
+@pytest.mark.parametrize("state", [True, False, True, False])
+def test_dtr_reaches_the_peer_dsr(pair, state):
+	ft, other = pair
+	ft.dtr = state
+	assert other.dsr is state
+
+
+@pytest.mark.parametrize("state", [True, False])
+def test_peer_dtr_reaches_the_chip_dsr(pair, state):
+	ft, other = pair
+	other.dtr = state
+	assert ft.dsr is state
 
 
 @pytest.mark.parametrize("value", [1, 0], ids=["high", "low"])
@@ -101,23 +169,11 @@ def test_ri_follows_the_pin(chip, pair, value):
 		assert ft.ri is bool(value)
 
 
-@pytest.mark.parametrize("value", [1, 0], ids=["high", "low"])
-def test_dsr_is_inverted_on_the_pin(chip, pair, value):
-	"""GPIOH is read as TIOCM_DSR inverted, unlike DCD and RI.
+def test_dcd_ri_attribute_reports_dcd_on_ri_off(chip, pair):
+	"""uart_dcd_ri 1 takes GPIO4 and GPIO5 from the gpiochip.
 
-	DSR is not cabled here, so driving it is safe. GPIOE is left
-	alone: it is CTS and the peer's RTS drives it.
-	"""
-	ft, _ = pair
-	with driven(chip.base + DSR, value):
-		assert ft.dsr is not bool(value)
-
-
-def test_dcd_ri_attribute_gates_the_ioctl(chip, pair):
-	"""uart_dcd_ri 1 takes GPIO4 and GPIO5 back, so both ioctls fail.
-
-	The guard wants the whole FT260_GPIO_UART_MODE_4_SET, and that
-	includes the two DCD/RI bits. The attribute is write only, so the
+	The driver does not read the two pins then, so tiocmget reports
+	DCD active and RI not active. The attribute is write only, so the
 	old value cannot be read; 0 is what the mask shows now.
 
 	The write has to happen with the port already open. Opening it
@@ -135,9 +191,9 @@ def test_dcd_ri_attribute_gates_the_ioctl(chip, pair):
 		assert mask is not None, "the driver logged no mask"
 		assert int(mask, 16) & DCD_RI == 0
 
-		with pytest.raises(OSError) as err:
-			ft.cts
-		assert err.value.errno == errno.EINVAL
+		assert ft.cd is True
+		assert ft.ri is False
+		assert ft.cts in (True, False)
 	finally:
 		marker = ftlib.mark("dcd-ri-0")
 		ftlib.write_attr(chip.uart, "uart_dcd_ri", 0)
@@ -147,9 +203,40 @@ def test_dcd_ri_attribute_gates_the_ioctl(chip, pair):
 	assert ft.cts in (True, False)
 
 
-def test_refused_while_rts_cts_owns_the_pins(chip, peer_link):
-	"""With CRTSCTS the mask drops bits 7 and 10, so both ioctls fail."""
-	with pytest.raises(OSError) as err:
-		with serial.Serial(chip.tty, BAUD, rtscts=True, timeout=2) as ft:
-			ft.cts
-	assert err.value.errno == errno.EINVAL
+def test_flow_reports_owned_lines_active(flow):
+	"""The owned pair reads active while the peer drives its line off."""
+	setattr(flow.other, flow.out, False)
+	assert tiocmget(flow.ft) & flow.owned == flow.owned
+
+
+def test_flow_free_pair_follows_the_peer(flow):
+	for state in (True, False, True, False):
+		setattr(flow.other, flow.free_out, state)
+		assert getattr(flow.ft, flow.free_in) is state
+
+
+def test_flow_tiocmset_ignores_the_owned_line(flow):
+	"""Setting the owned output off is not an error and does nothing.
+
+	With no data flowing the chip holds the line active.
+	"""
+	setattr(flow.ft, flow.out, False)
+	assert getattr(flow.other, flow.inp) is True
+	assert tiocmget(flow.ft) & flow.owned == flow.owned
+
+
+def test_flow_tiocmset_sets_the_free_line(flow):
+	"""The free output follows tiocmset, and the flow control still works.
+
+	tiocmset writes the whole GPIO report, which also carries the pins
+	in UART function.
+	"""
+	for state in (True, False, True, False):
+		setattr(flow.ft, flow.free_out, state)
+		assert getattr(flow.other, flow.free_in) is state
+		assert getattr(flow.other, flow.inp) is True
+
+	flow.other.write(DATA)
+	assert flow.ft.read(len(DATA)) == DATA
+	flow.ft.write(DATA)
+	assert flow.other.read(len(DATA)) == DATA
