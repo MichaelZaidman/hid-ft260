@@ -8,7 +8,7 @@ device lock. The reset then runs usbhid's pre_reset while the failing
 probe, or the probe of the sibling interface, starts or stops the HID
 hardware.
 
-This needs a module built with the TN_189 test harness: the parameters
+This needs a module built with the test harness: the parameters
 fake_bus, fake_dev, fake_ifmask and fake_delay_ms. The next probe of an
 interface whose bit is set in fake_ifmask fails as if the chip did not
 answer, queues the reset and sleeps fake_delay_ms before it stops the
@@ -39,18 +39,18 @@ The test is skipped when modinfo of the --ko module has no fake_ifmask
 parameter.
 
 Build the harness module from this repo, in a directory of its own,
-for the running kernel. tn189_harness.py adds the harness to a copy of
+for the running kernel. ft260_harness.py adds the harness to a copy of
 hid-ft260.c; the driver in the repo stays as it is. Run make inside
 that directory: the Makefile builds M=$(PWD).
 
     mkdir /tmp/ft260-harness
-    python3 tn189_harness.py ../hid-ft260.c /tmp/ft260-harness/hid-ft260.c
+    python3 ft260_harness.py ../hid-ft260.c /tmp/ft260-harness/hid-ft260.c
     cp ../hid-ids.h ../Makefile /tmp/ft260-harness/
     (cd /tmp/ft260-harness && make)
     sudo .venv/bin/pytest -v --ko=/tmp/ft260-harness/hid-ft260.ko \\
         test_tn189_reset_race.py
 
-tn189_harness.py also takes drivers/hid/hid-ft260.c of a kernel tree,
+ft260_harness.py also takes drivers/hid/hid-ft260.c of a kernel tree,
 for a module of that tree.
 """
 
@@ -96,7 +96,7 @@ def harness(chip, ko):
 	parms = subprocess.run(["modinfo", "-F", "parm", ko],
 			       capture_output=True, text=True).stdout
 	if "fake_ifmask" not in parms:
-		pytest.skip("module built without the TN_189 test harness")
+		pytest.skip("module built without the test harness")
 
 	nodes = ftlib.find_nodes(chip.usb)
 	found = {

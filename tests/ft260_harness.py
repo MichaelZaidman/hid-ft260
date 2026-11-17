@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# Test-only: add TN_189 fault injection and a reset/probe overlap
-# detector to a copy of hid-ft260.c: the one of this repo, or
-# drivers/hid/hid-ft260.c of a kernel tree. Never sent upstream.
-# tests/test_tn189_reset_race.py uses the result.
+# Test-only: add fault injection to a copy of hid-ft260.c: the one of
+# this repo, or drivers/hid/hid-ft260.c of a kernel tree. Never sent
+# upstream. One module built from the result serves both groups below.
 #
-# Usage: tn189_harness.py IN.c OUT.c
+# Usage: ft260_harness.py IN.c OUT.c
 #
-# Module parameters of the result:
+# TN_189 probe failure and reset/probe overlap detector, used by
+# tests/test_tn189_reset_race.py:
 #   fake_bus, fake_dev  USB bus and device number of the board under test
 #   fake_ifmask         bit N set: the next probe of interface N acts as if
 #                       ft260_check_dev_responsive() returned -ENODEV; the
@@ -15,6 +15,11 @@
 #                       ft260_schedule_reset() and hid_hw_stop()
 # The reset work logs "harness: USB reset while N probes run" when it
 # calls usb_reset_device() while a probe of that board is in ft260_probe().
+#
+# UART TX failure, used by tests/test_uart_tx_error.py:
+#   fake_tx_fail        fail this many UART data output reports with
+#                       -EIO, on any board, and log "harness: fake TX
+#                       failure" for each
 import sys
 
 src, dst = sys.argv[1], sys.argv[2]
@@ -30,7 +35,7 @@ def rep(old, new):
 rep('MODULE_PARM_DESC(debug, "Toggle FT260 debugging messages");\n',
     '''MODULE_PARM_DESC(debug, "Toggle FT260 debugging messages");
 
-/* TN_189 test harness, test-only */
+/* hid-ft260 test harness, test-only */
 #include <linux/delay.h>
 static uint fake_bus;
 module_param(fake_bus, uint, 0600);
@@ -40,6 +45,8 @@ static ulong fake_ifmask;
 module_param(fake_ifmask, ulong, 0600);
 static uint fake_delay_ms;
 module_param(fake_delay_ms, uint, 0600);
+static uint fake_tx_fail;
+module_param(fake_tx_fail, uint, 0600);
 static atomic_t ft260_fake_probes = ATOMIC_INIT(0);
 
 static bool ft260_fake_match(struct usb_device *udev)
@@ -107,6 +114,16 @@ rep('\tret = usb_reset_device(usbdev);\n',
 		dev_warn(&usbif->dev, "harness: USB reset while %d probes run\\n",
 			 atomic_read(&ft260_fake_probes));
 	ret = usb_reset_device(usbdev);
+''')
+
+rep('\t\tret = ft260_hid_output_report(hdev, (u8 *)rep, len + 2);\n',
+    '''		if (READ_ONCE(fake_tx_fail)) {
+			WRITE_ONCE(fake_tx_fail, fake_tx_fail - 1);
+			hid_info(hdev, "harness: fake TX failure\\n");
+			ret = -EIO;
+		} else {
+			ret = ft260_hid_output_report(hdev, (u8 *)rep, len + 2);
+		}
 ''')
 
 open(dst, 'w').write(s)
